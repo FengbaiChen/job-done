@@ -10,7 +10,7 @@ Six stages, running as a loop:
 
 1. **Discover** — on a schedule (default 4× daily), `discover.py` pulls ~40 curated company boards via public job-board APIs plus LinkedIn guest search, filters programmatically (dedupe, new-grad signal, lane keywords, recency, location), and the agent judges only the pre-filtered candidates before shortlisting the top 10.
 2. **Select** — you pick which roles to pursue.
-3. **Prepare** — the agent fills each application completely: standing answers, manually entered education (never trusting resume auto-parse), resume + transcript upload, drafted free-text answers. It stops before Submit.
+3. **Prepare** — the agent fills each application completely: standing answers, manually entered education (never trusting resume auto-parse), resume + transcript upload, drafted free-text answers. Free-text answers are reused from a Q&A answer bank when a user-approved answer matches (`scripts/qa_match.py`); the LLM drafts only genuinely new questions, once. Per-ATS form structures are cached (`scripts/form_cache.py`), so a form is never re-parsed from scratch. It stops before Submit.
 4. **Approve** — you review. `batch` mode: one combined review, then "submit all". `per_application` mode: approve each role as it comes.
 5. **Submit & log** — the agent submits only on your explicit approval, then records the confirmation, timestamp, and any application ID.
 6. **Track** — a Google Sheet stays current: every application, its status, and a run history of every discovery run.
@@ -43,6 +43,9 @@ Once set up, just talk to your agent:
 | `templates/config.template.yaml` | Annotated settings template → becomes `config.yaml` |
 | `templates/profile.template.yaml` | Annotated personal-data template → becomes `profile.yaml` |
 | `templates/standing-answers.template.md` | Form-filling rules template → becomes `references/standing-answers.md` |
+| `templates/qa_bank.template.json` | Q&A answer-bank template → becomes `state/qa_bank.json` (seeded from standing answers, grows with approvals) |
+| `scripts/qa_match.py` | Answer-bank matcher — reuses user-approved free-text answers, LLM drafts only new questions |
+| `scripts/form_cache.py` | Per-ATS application-form structure cache — forms are never re-parsed from scratch |
 | `references/` | Live standing answers (created during setup, never committed) |
 | `state/` | Runtime state: dedupe cache + run logs (never committed) |
 

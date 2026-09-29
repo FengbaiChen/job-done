@@ -7,7 +7,7 @@ description: "Run the automated job-application pipeline: discover new-grad role
 
 ## Purpose
 
-An end-to-end, human-in-the-loop job application loop. Scheduled runs discover roles; the user selects; the agent fills; the user approves; the agent submits and logs. Personal data lives in `profile.yaml` and `state/` — never share those. Shareable parts: `SKILL.md`, `discover.py`, `ONBOARDING.md`, `config.yaml` (as a template), `references/` (including the verified board list `company_boards.json`).
+An end-to-end, human-in-the-loop job application loop. Scheduled runs discover roles; the user selects; the agent fills; the user approves; the agent submits and logs. Personal data lives in `profile.yaml` and `state/` — never share those. Shareable parts: `SKILL.md`, `discover.py`, `scripts/`, `ONBOARDING.md`, `config.yaml` (as a template), `references/` (including the verified board list `company_boards.json`).
 
 ## Workflow
 
@@ -34,7 +34,17 @@ If `auto_select: true` in config.yaml, skip this step: proceed with all shortlis
 
 ### Stage 3 — Prepare (agent)
 
-For each selected role: open the application page, fill every field per `references/standing-answers.md`, upload the lane-matched resume + transcript automatically (no permission needed), draft any required free-text answers. STOP before Submit.
+For each selected role:
+
+1. **Form structure (cached, no LLM re-parse):** before filling, run
+   `python3 ~/workspace/skills/job-pipeline/scripts/form_cache.py "<application URL>"`.
+   It prints the board's cached field mapping (form labels → types/requirements), fetching the public structure only on a cache miss. Reuse that mapping to fill standard fields (name, email, phone, links, education, EEO, work authorization) from `profile.yaml` and `references/standing-answers.md` — do NOT have the LLM re-read and re-parse the entire form on every application. Only genuinely new/unknown fields get individual attention.
+2. **Free-text questions via the answer bank:** for every free-text/essay question on the form:
+   a. Run `python3 ~/workspace/skills/job-pipeline/scripts/qa_match.py --question "<exact question text>"` against `state/qa_bank.json`.
+   b. Score ≥ 0.75 → reuse the banked answer verbatim (still show it in the user review); bump its `use_count` in `state/qa_bank.json`.
+   c. No match → draft the answer with the LLM exactly ONCE, and only after the user approves that wording in review, append it to `state/qa_bank.json` (`question`, `answer`, `company`, `role`, `approved_at`, `use_count: 0`).
+   Rules: never invent answers; unapproved drafts never enter the bank; sensitive fields (CSRF tokens, tracking IDs, captcha widgets, hidden inputs) are never sent to the LLM and never banked.
+3. Fill every field per `references/standing-answers.md`, upload the lane-matched resume + transcript automatically (no permission needed). STOP before Submit.
 
 How the review works depends on `submit_review_mode` in config.yaml:
 

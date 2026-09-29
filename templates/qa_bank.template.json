@@ -1,0 +1,12 @@
+// Q&A answer bank template for the job-pipeline skill.
+// Copy to state/qa_bank.json (personal, never committed) and fill in as the
+// user approves answers to free-text questions. Each entry:
+// {"question": "exact question text as seen on the form",
+//  "answer": "user-approved answer, reused verbatim on future matches",
+//  "company": "company where it was approved (optional, may be empty)",
+//  "role": "role where it was approved (optional, may be empty)",
+//  "approved_at": "YYYY-MM-DD",
+//  "use_count": 0}
+// The seed bank is built from references/standing-answers.md during onboarding:
+// only questions with a pre-approved answer go in — never invent answers.
+[]

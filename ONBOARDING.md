@@ -12,7 +12,7 @@ Ask the user to upload 1–3 resumes. Read each one and extract:
 - links (LinkedIn, GitHub, personal site)
 - skills and standout projects → propose 1 lane per resume (e.g. agent/infra, ai/cloud, genai) with 2–3 example search queries each
 
-Store the files (note their paths). Copy `templates/profile.template.yaml` → `profile.yaml` and fill it in, then copy `templates/standing-answers.template.md` → `references/standing-answers.md` and adjust the rules to the user's situation.
+Store the files (note their paths). Copy `templates/profile.template.yaml` → `profile.yaml` and fill it in, then copy `templates/standing-answers.template.md` → `references/standing-answers.md` and adjust the rules to the user's situation. Then copy `templates/qa_bank.template.json` → `state/qa_bank.json` and seed it with the Q&A pairs from `references/standing-answers.md` that already have approved answers (never invent answers).
 
 ## Step 2 — Confirm + fill gaps
 
