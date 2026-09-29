@@ -5,3 +5,6 @@ config.yaml
 references/standing-answers.md
 state/*
 !state/.gitkeep
+# Resumes and transcripts must never be pushed, even if someone drops them
+# into this folder by accident.
+*.pdf
