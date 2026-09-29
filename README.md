@@ -57,3 +57,7 @@ Once set up, just talk to your agent:
 - The Muse app (the agent runs the pipeline; the repo is its playbook)
 - A Google account (required): Gmail for reply tracking and on-demand verification codes, plus Sheets for the tracker (the agent sets both up with you)
 - Your resumes as PDFs, and optionally a transcript
+
+## Technical report
+
+[TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) — user guide, core architecture (sources, filtering, form filling, submission gating, email tracking), and a survey of related open-source frameworks with a borrowed-vs-invented breakdown.
