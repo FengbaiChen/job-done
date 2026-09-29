@@ -53,7 +53,13 @@ Copy `templates/config.template.yaml` → `config.yaml` and fill it in with the 
 
 ## Step 5 — Go live
 
-Create the discovery cron(s) per the schedule (owner: the user's job-search goal or tracked item). Confirm with the user:
+Create the discovery cron(s) per the schedule (owner: the user's job-search goal or tracked item).
+
+Reporting destination: ask whether discovery reports should go to a dedicated
+side chat (recommended — keeps the main chat clean) or stay in the current
+chat. If side chat: create it and set it as the crons' `delivery` target.
+
+Confirm with the user:
 
 - "run the pipeline now" — runs a discovery immediately
 - "reset pipeline config" — re-runs this onboarding (confirm before wiping)
