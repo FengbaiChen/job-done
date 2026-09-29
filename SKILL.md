@@ -73,4 +73,8 @@ A role may match multiple lanes; assign the highest-priority matching lane and u
 
 ## Sharing
 
-To give this to a friend: copy `SKILL.md`, `ONBOARDING.md`, `references/`, and `templates/` — NOT `profile.yaml`, `config.yaml`, or `state/` (personal). Then follow `ONBOARDING.md` with them in conversation; the templates carry the file structure plus setup instructions.
+Public repo: https://github.com/xf-mike/muse-job-pipeline
+
+To give this to a friend, just send them the link. Their agent clones it into `~/workspace/skills/job-pipeline/` and follows `ONBOARDING.md` with them in conversation. The repo holds only the shareable playbook + templates — `profile.yaml`, `config.yaml`, and `state/` are gitignored, so personal data can never leak into it.
+
+The repo is the source of truth for the playbook: edit `SKILL.md` / `ONBOARDING.md` / `templates/` in `~/workspace/job-pipeline/`, then `git add -A && git commit -m "..." && git push`.
