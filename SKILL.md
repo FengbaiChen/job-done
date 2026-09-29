@@ -45,6 +45,9 @@ For each selected role:
    c. No match → draft the answer with the LLM exactly ONCE, and only after the user approves that wording in review, append it to `state/qa_bank.json` (`question`, `answer`, `company`, `role`, `approved_at`, `use_count: 0`).
    Rules: never invent answers; unapproved drafts never enter the bank; sensitive fields (CSRF tokens, tracking IDs, captcha widgets, hidden inputs) are never sent to the LLM and never banked.
 3. Fill every field per `references/standing-answers.md`, upload the lane-matched resume + transcript automatically (no permission needed). STOP before Submit.
+4. **Email verification codes (on demand only):** some sites require an email verification code during registration or before submission. If a browser fill task parks at such a step, it MUST report back and stop: the site URL, the exact step it is stuck at, and the masked recipient shown on the page (e.g. "code sent to x•••@ucsd.edu"). It must NOT guess the code or proceed.
+   The orchestrating agent then performs ONE targeted Gmail lookup: search for the newest message (last ~15 minutes) from that site's sender address, read ONLY that single matching message, take the code, and hand it to the waiting browser task for that step only.
+   Hard rules: one code per step, never reuse a code, never write codes to files / memory / state / logs, never scan the inbox for codes speculatively (no background code sweeps). If no fresh matching message exists, tell the browser task to report back (the user may need to trigger a resend). Filling in the code happens during filling; the final Submit still requires the user's explicit approval — see Stage 5.
 
 How the review works depends on `submit_review_mode` in config.yaml:
 
@@ -60,11 +63,17 @@ How the review works depends on `submit_review_mode` in config.yaml:
 
 Submit each approved application. Capture: confirmation text, timestamp, application/reference ID if shown. Append one row per application to the tracker. Mark each URL `"decision": "applied"` in `state/seen_roles.json`.
 
-Submission is always via the browser flow: fill per Stage 3, park at the final review screen, and click Submit only on the user's explicit "submit" / "submit all". Direct-POST submission was evaluated on 2026-09-29 and rejected — do not build or use HTTP submitters: Greenhouse's documented application POST requires an employer API key (Basic Auth); its hosted form is gated by invisible reCAPTCHA Enterprise (bot-scored submissions get HTTP 428 `captcha-failed` and a two-phase email security-code flow) and uploads resumes via presigned S3, so pure-HTTP submission cannot pass; Ashby's hosted submit needs reCAPTCHA + CSRF with v3 spam scoring; Lever/Workday expose no candidate POST path. The public `?questions=true` job endpoint remains the supported way to read a Greenhouse form's structure (used by `scripts/form_cache.py`).
+Submission is always via the browser flow: fill per Stage 3, park at the final review screen, and click Submit only on the user's explicit "submit" / "submit all". Email verification codes encountered during filling are handled per the Stage 3 step 4 on-demand lookup — they never replace the explicit submit approval. Direct-POST submission was evaluated on 2026-09-29 and rejected — do not build or use HTTP submitters: Greenhouse's documented application POST requires an employer API key (Basic Auth); its hosted form is gated by invisible reCAPTCHA Enterprise (bot-scored submissions get HTTP 428 `captcha-failed` and a two-phase email security-code flow) and uploads resumes via presigned S3, so pure-HTTP submission cannot pass; Ashby's hosted submit needs reCAPTCHA + CSRF with v3 spam scoring; Lever/Workday expose no candidate POST path. The public `?questions=true` job endpoint remains the supported way to read a Greenhouse form's structure (used by `scripts/form_cache.py`).
 
 ### Stage 6 — Track (ongoing)
 
-The tracker is the source of truth. Optional: daily Gmail scan for recruiter replies → notify the user.
+The tracker is the source of truth. Run
+`python3 ~/workspace/skills/job-pipeline/scripts/gmail_scan.py`
+on a schedule (every 4–6h; silent unless hits) to detect recruiter replies,
+interview invitations, and application confirmations: it is watermarked and
+incremental, pre-filters without any LLM, and matches senders against the
+tracker's company list. Report hits to the user and update the tracker's
+Status column.
 
 ## Lane matching
 

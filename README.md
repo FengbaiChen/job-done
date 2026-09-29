@@ -10,10 +10,10 @@ Six stages, running as a loop:
 
 1. **Discover** — on a schedule (default 4× daily), `discover.py` pulls ~40 curated company boards via public job-board APIs plus LinkedIn guest search, filters programmatically (dedupe, new-grad signal, lane keywords, recency, location), and the agent judges only the pre-filtered candidates before shortlisting the top 10.
 2. **Select** — you pick which roles to pursue.
-3. **Prepare** — the agent fills each application completely: standing answers, manually entered education (never trusting resume auto-parse), resume + transcript upload, drafted free-text answers. Free-text answers are reused from a Q&A answer bank when a user-approved answer matches (`scripts/qa_match.py`); the LLM drafts only genuinely new questions, once. Per-ATS form structures are cached (`scripts/form_cache.py`), so a form is never re-parsed from scratch. It stops before Submit.
+3. **Prepare** — the agent fills each application completely: standing answers, manually entered education (never trusting resume auto-parse), resume + transcript upload, drafted free-text answers. Free-text answers are reused from a Q&A answer bank when a user-approved answer matches (`scripts/qa_match.py`); the LLM drafts only genuinely new questions, once. Per-ATS form structures are cached (`scripts/form_cache.py`), so a form is never re-parsed from scratch. Email verification codes are fetched on demand only: if a fill task parks at a verification step, the agent does one targeted Gmail lookup for that single fresh message, uses the code once, and never stores it. It stops before Submit.
 4. **Approve** — you review. `batch` mode: one combined review, then "submit all". `per_application` mode: approve each role as it comes.
 5. **Submit & log** — the agent submits only on your explicit approval, then records the confirmation, timestamp, and any application ID.
-6. **Track** — a Google Sheet stays current: every application, its status, and a run history of every discovery run.
+6. **Track** — a Google Sheet stays current: every application, its status, and a run history of every discovery run. `scripts/gmail_scan.py` watches the mailbox for recruiter replies and confirmation emails (watermarked, incremental, read-only) and feeds status updates back into the tracker.
 
 Nothing is ever submitted without the user explicitly saying **"submit"**.
 
@@ -46,6 +46,7 @@ Once set up, just talk to your agent:
 | `templates/qa_bank.template.json` | Q&A answer-bank template → becomes `state/qa_bank.json` (seeded from standing answers, grows with approvals) |
 | `scripts/qa_match.py` | Answer-bank matcher — reuses user-approved free-text answers, LLM drafts only new questions |
 | `scripts/form_cache.py` | Per-ATS application-form structure cache — forms are never re-parsed from scratch |
+| `scripts/gmail_scan.py` | Read-only Gmail scan — recruiter replies + confirmation emails, watermarked and incremental, matched against the tracker |
 | `references/` | Live standing answers (created during setup, never committed) |
 | `state/` | Runtime state: dedupe cache + run logs (never committed) |
 
@@ -54,5 +55,5 @@ Once set up, just talk to your agent:
 ## Requirements
 
 - The Muse app (the agent runs the pipeline; the repo is its playbook)
-- A Google account, if you want the Sheets tracker (the agent sets it up for you)
+- A Google account (required): Gmail for reply tracking and on-demand verification codes, plus Sheets for the tracker (the agent sets both up with you)
 - Your resumes as PDFs, and optionally a transcript
