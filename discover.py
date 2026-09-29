@@ -14,9 +14,13 @@ Non-interactive: safe to run from cron workers. Never prompts.
 Usage:
     python3 discover.py [--dry-run] [--limit N] [--max-candidates N] [--li-pages N]
 
-Outputs:
+Outputs (real runs only; --dry-run writes nothing):
     state/discovery_candidates.json  (compact candidate list for LLM judging)
-    stdout: one-line summary (boards, jobs pulled, filtered, candidates, seconds)
+    state/discovery_watermark.json   ({"last_successful_run": ISO ts, "runs": n})
+    state/job_presence.json          ({url: {"run": n, "run_id": "YYYY-MM-DD-HHMM"}})
+    state/seen_roles.json            (updated in place: absent-3-runs jobs -> "closed")
+    stdout: one-line summary (boards, jobs pulled, filtered, candidates, seconds,
+            watermark run counter, newly-closed count)
 """
 import argparse
 import html as htmlmod
@@ -174,6 +178,56 @@ def fetch_linkedin(query, pages):
         out.extend(_parse_li_cards(page_html))
     return out
 
+# ------------------------------------------------- incremental state ---
+# Watermark + presence tracking let consecutive runs act incrementally and
+# detect silently-closed postings (ATS boards drop closed jobs without notice).
+#   state/discovery_watermark.json : {"last_successful_run": "<ISO ts>", "runs": n}
+#   state/job_presence.json        : {url: {"run": n, "run_id": "YYYY-MM-DD-HHMM"}}
+# A job absent for ABSENT_RUNS_TO_CLOSE consecutive runs whose seen_roles
+# decision is not applied/shortlisted is marked "closed" ("no longer listed").
+ABSENT_RUNS_TO_CLOSE = 3
+
+def load_watermark():
+    try:
+        with open(f"{SKILL_DIR}/state/discovery_watermark.json") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"last_successful_run": None, "runs": 0}
+
+def load_presence():
+    try:
+        with open(f"{SKILL_DIR}/state/job_presence.json") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def last_seen_run(entry):
+    """Normalize a presence entry to its run counter (supports int or dict)."""
+    if isinstance(entry, dict):
+        return entry.get("run", 0)
+    return entry or 0
+
+def close_absent_jobs(presence, seen, current_n):
+    """Mark jobs absent for ABSENT_RUNS_TO_CLOSE consecutive runs as closed.
+
+    Never touches 'applied' or 'shortlisted' decisions (the user may still act
+    on those). Only marks URLs already present in seen_roles.json. Mutates
+    `seen` in place. Returns the number of newly-closed entries.
+    """
+    closed = 0
+    for url, entry in presence.items():
+        if current_n - last_seen_run(entry) < ABSENT_RUNS_TO_CLOSE:
+            continue
+        rec = seen.get(url)
+        if not rec:
+            continue  # pulled but never surfaced to the agent; nothing to mark
+        if rec.get("decision") in ("applied", "shortlisted", "closed"):
+            continue
+        rec["decision"] = "closed"
+        rec["reason"] = "no longer listed"
+        closed += 1
+    return closed
+
 # ---------------------------------------------------------------- filters ---
 NEWGRAD = re.compile(
     r"new[\s\-]?grad|entry[\s\-]?level|university grad|early career"
@@ -256,6 +310,7 @@ def main():
              "deduped": 0, "candidates": 0, "li_ok": 0, "li_failed": 0}
     failed_boards = []
     seen_urls = set()  # in-run dedupe: same posting can surface via multiple queries
+    pulled_urls = []   # every job URL fetched this run (for presence tracking)
     pool = []
 
     def consider(job, board_company=""):
@@ -263,6 +318,7 @@ def main():
         url = job.get("url", "")
         if not url:
             return
+        pulled_urls.append(url)  # presence: upserted even if filtered/deduped below
         # (a) dedupe FIRST — never re-read a seen URL
         if url in seen or url in seen_urls:
             stats["deduped"] += 1
@@ -348,7 +404,26 @@ def main():
     stats["candidates"] = len(candidates)
     elapsed = time.time() - t0
 
+    # Incremental state: watermark, presence upsert, absence->closed marking.
+    # Written only on real runs; --dry-run touches nothing on disk.
+    run_id = datetime.now().strftime("%Y-%m-%d-%H%M")
+    watermark = load_watermark()
+    presence = load_presence()
+    run_n = watermark.get("runs", 0)
+    closed_marked = 0
     if not args.dry_run:
+        run_n += 1
+        for u in pulled_urls:
+            presence[u] = {"run": run_n, "run_id": run_id}
+        closed_marked = close_absent_jobs(presence, seen, run_n)
+        watermark = {"last_successful_run": datetime.now().isoformat(timespec="seconds"),
+                     "runs": run_n}
+        with open(f"{SKILL_DIR}/state/discovery_watermark.json", "w") as f:
+            json.dump(watermark, f, indent=1)
+        with open(f"{SKILL_DIR}/state/job_presence.json", "w") as f:
+            json.dump(presence, f, indent=1)
+        with open(f"{SKILL_DIR}/state/seen_roles.json", "w") as f:
+            json.dump(seen, f, indent=1)
         with open(f"{SKILL_DIR}/state/discovery_candidates.json", "w") as f:
             json.dump({"generated_at": datetime.now().isoformat(timespec="seconds"),
                        "candidates": candidates}, f, indent=1)
@@ -356,7 +431,8 @@ def main():
     print(f"boards_ok={stats['boards_ok']} boards_failed={stats['boards_failed']} "
           f"li_queries_ok={stats['li_ok']}/{stats['li_ok']+stats['li_failed']} "
           f"jobs_pulled={stats['pulled']} deduped_skipped={stats['deduped']} "
-          f"candidates={stats['candidates']} elapsed_s={elapsed:.1f}")
+          f"candidates={stats['candidates']} elapsed_s={elapsed:.1f} "
+          f"watermark={run_n} closed_marked={closed_marked}")
     if failed_boards:
         print("failed_boards: " + ", ".join(failed_boards[:10]))
     if args.dry_run:
