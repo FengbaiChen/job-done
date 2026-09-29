@@ -52,6 +52,22 @@ storage:
   tracker: "google_sheet"          # spreadsheet id stored in state/tracker.json after creation
   cache: "state/seen_roles.json"
 
+# Max age of a job posting to consider, in days.
+#   0.5 = past 12 hours, 1 = past 24 hours, 3 = past 3 days, 7 = past week.
+# Applied best-effort: sources with built-in date filters (e.g. LinkedIn's
+# past-week) use them; other boards are checked by reading the posting date.
+# Boards that expose no date can't be filtered — those roles pass through.
+# Tight windows (12h) on a frequent schedule can yield empty shortlists;
+# that's fine, the pipeline just stays silent on empty runs.
+max_post_age_days: 7
+
+# If true, skip the user-selection step: all shortlisted roles go straight
+# to Prepare without asking the user to pick. For users who want zero-touch
+# discovery. Default false.
+# SUBMIT APPROVAL IS NEVER SKIPPED — the user still reviews and approves
+# (batch or per-application) before anything is submitted.
+auto_select: false
+
 # Explicit never-apply list. Keep this SMALL — it is for companies the user
 # personally blacklists, not for already-applied ones.
 # Already-applied / already-seen roles live in state/seen_roles.json instead,

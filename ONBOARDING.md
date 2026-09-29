@@ -47,6 +47,8 @@ Copy `templates/config.template.yaml` → `config.yaml` and fill it in with the 
 - locations: preferred, acceptable, excluded
 - companies to never apply to (`blacklist` — keep small; already-applied roles are deduped via `state/seen_roles.json`, not here)
 - submit review mode: `batch` (fill all → one combined review → "submit all") or `per_application` (fill → review → approve → submit, one role at a time)
+- posting recency: how fresh must a role be? (`max_post_age_days` — 7 = past week, 3, 1 = past 24h, 0.5 = past 12h; best-effort per source)
+- auto-select: skip the role-picking step and go straight to filling? (`auto_select` — for lazy users; submit approval is never skipped)
 - grad-date eligibility rules per lane if relevant
 
 ## Step 5 — Go live

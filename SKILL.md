@@ -16,15 +16,17 @@ An end-to-end, human-in-the-loop job application loop. Scheduled runs discover r
 1. Read `config.yaml` and `state/seen_roles.json`.
 2. Browse ~`discovery.browse_target` roles across all lanes, highest lane priority first. Sources: LinkedIn Jobs, Ashby / Greenhouse / Workday company boards, YC jobs, aggregators, company career pages.
 3. For each candidate URL, check `state/seen_roles.json` FIRST. If seen, skip it entirely — never re-read a seen role (this is the token saver). Also skip companies in the `blacklist` in config.yaml (explicit never-apply list).
-4. Filter keepers: not in the `blacklist`, not already applied (check the tracker), new-grad eligible per config grad rules, location fit (preferred locations first; `relocation: yes` means other US locations are eligible but deprioritized), sponsorship plausibility.
+4. Filter keepers: not in the `blacklist`, not already applied (check the tracker), posted within `max_post_age_days` (use the source's date filter where available — e.g. LinkedIn's past-week — otherwise read the posting date and drop stale ones; best-effort when a board exposes no date), new-grad eligible per config grad rules, location fit (preferred locations first; `relocation: yes` means other US locations are eligible but deprioritized), sponsorship plausibility.
 5. Lane-match each keeper (see Lane matching). Keep the top `discovery.shortlist_size`, ordered by lane priority then fit.
 6. Write EVERY browsed role to `state/seen_roles.json`: keepers → `"decision": "shortlisted"`; the rest → `"decision": "rejected"` with a short `"reason"`.
 7. Save the shortlist to `state/runs/<YYYY-MM-DD-HHMM>.json`.
 8. Shortlist non-empty → report it to the user for selection. Empty → stay silent.
 
-### Stage 2 — Select (user)
+### Stage 2 — Select (user, unless auto_select)
 
 Present the shortlist: company, role, location, lane, link, one-line fit note. The user picks ("all", numbers, or names).
+
+If `auto_select: true` in config.yaml, skip this step: proceed with all shortlisted roles straight to Stage 3. Submit approval in Stage 4 is never skipped.
 
 ### Stage 3 — Prepare (agent)
 
