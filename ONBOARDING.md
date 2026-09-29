@@ -45,7 +45,27 @@ Follow the gmail skill's standard connect flow (`/opt/hatch/skills/gmail/SKILL.m
 
 Set expectations in one or two sentences, in the user's own words: verification codes are fetched **on demand only**. The pipeline reads Gmail only when a form-fill task parks at a verification step and reports back the site URL and the masked recipient shown on the page; then it does one targeted lookup for that single freshly-arrived message, uses the code once for that step, and never stores it, never reuses it, and never sweeps the inbox for codes.
 
-## Step 4 — Storage
+## Step 4 — LinkedIn login (recommended if LinkedIn is a discovery source)
+
+Roles discovered from LinkedIn need one click on "Apply" — and LinkedIn gates
+that behind sign-in. The pipeline handles this with a **user-takeover login**
+(the assistant never sees the password):
+
+1. Spawn a browser task that opens https://www.linkedin.com/login and parks,
+   asking the user to take over.
+2. The user opens the task's browser panel, takes over, and signs in with
+   their own credentials (including any 2FA / verification challenge), then
+   ends the takeover and confirms.
+3. Verify the login (linkedin.com/feed shows a logged-in homepage, not a
+   login wall), then close the task. The session persists in the shared
+   browser profile, so all later fill tasks reuse it.
+4. If a fill task ever reports "linkedin session expired", repeat this step.
+
+All browser tasks share one Chromium profile — the LinkedIn session is shared
+across tasks. Be upfront: LinkedIn's ToS technically prohibits automated
+access, so there is a small account-risk tradeoff; let the user decide.
+
+## Step 5 — Storage
 
 Recommend: **Google Sheet** (human-facing tracker — shareable, phone-friendly) + **local `state/seen_roles.json`** (machine dedupe cache so browsed roles are never re-read). Alternative: local-only if they decline Google.
 
@@ -53,7 +73,7 @@ If Sheet: connect Google Sheets, create the tracker with columns:
 `Date | Company | Role | Location | Lane | Link | Confirmation | App ID | Status | Notes`
 Save the spreadsheet ID in `state/tracker.json`.
 
-## Step 5 — Config
+## Step 6 — Config
 
 Copy `templates/config.template.yaml` → `config.yaml` and fill it in with the user
 (the template's comments explain every field):
@@ -68,7 +88,7 @@ Copy `templates/config.template.yaml` → `config.yaml` and fill it in with the 
 - auto-select: skip the role-picking step and go straight to filling? (`auto_select` — for lazy users; submit approval is never skipped)
 - grad-date eligibility rules per lane if relevant
 
-## Step 6 — Go live
+## Step 7 — Go live
 
 Create the discovery cron(s) per the schedule (owner: the user's job-search goal or tracked item).
 

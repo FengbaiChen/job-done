@@ -369,6 +369,8 @@ def main():
     ap.add_argument("--limit", type=int, default=10**9, help="max jobs processed per board (testing)")
     ap.add_argument("--max-candidates", type=int, default=None,
                         help="max candidates emitted (default: discovery.browse_target from config)")
+    ap.add_argument("--max-age-days", type=float, default=None,
+                        help="override config max_post_age_days (e.g. 30 for a one-time backfill)")
     ap.add_argument("--li-pages", type=int, default=2, help="LinkedIn pages per query (10 cards each)")
     args = ap.parse_args()
     t0 = time.time()
@@ -380,7 +382,6 @@ def main():
     lanes_cfg = sorted(cfg.get("lanes", []), key=lambda l: l.get("priority", 99))
     lanes_by_priority = [l["name"] for l in lanes_cfg]
     queries = [q for l in lanes_cfg for q in l.get("queries", [])]
-    max_age = cfg.get("max_post_age_days", 7)
     blacklist = [b.lower() for b in (cfg.get("blacklist", {}) or {}).get("companies", [])]
 
     stats = {"boards_ok": 0, "boards_failed": 0, "pulled": 0,
@@ -424,13 +425,11 @@ def main():
         lane = lane_of(text, lanes_by_priority)
         if not lane:
             return
-        # (e) recency — hour precision, lenient: LinkedIn relative times are
-        # exact; day-granularity dates assume end-of-day (minimum possible age);
-        # unknown dates are kept (best-effort, never drop on missing data).
-        max_age_hours = max_age * 24
+        # (e) recency is applied AFTER fetching via the auto-scaling window
+        # (see below); record age here. Unknown dates are kept (best-effort,
+        # never drop on missing data). LinkedIn relative times are exact;
+        # day-granularity dates assume end-of-day (minimum possible age).
         age_h = _job_age_hours(job)
-        if age_h is not None and age_h > max_age_hours:
-            return
         # (f) location
         ls = loc_score(job.get("location", ""))
         if ls == 0:
@@ -441,7 +440,7 @@ def main():
             "date": job.get("date", ""), "lane": lane,
             "snippet": (job.get("snippet") or "")[:160],
             "source": job.get("source", ""),
-            "_loc": ls, "_date": job.get("date", ""),
+            "_loc": ls, "_date": job.get("date", ""), "_age_h": age_h,
         })
 
     def fetch_board(b):
@@ -491,15 +490,35 @@ def main():
         li_failed = f"{stats['li_failed']}/{stats['li_ok']+stats['li_failed']} queries failed"
     track_source("linkedin", li_jobs_all, failed=li_failed)
 
+    # Auto-scaling recency window: start tight (default 24h), expand stepwise
+    # until min_candidates pool entries are in-window (or the max step hits).
+    # --max-age-days overrides to a fixed window (one-time backfill behavior).
+    disc_cfg = cfg.get("discovery", {})
+    if args.max_age_days is not None:
+        window_days = args.max_age_days
+    else:
+        steps = disc_cfg.get("window_steps_days", [1, 3, 7, 14, 30]) or [30]
+        min_candidates = disc_cfg.get("min_candidates", 20)
+        window_days = steps[-1]
+        for w in steps:
+            in_w = sum(1 for c in pool if c["_age_h"] is None or c["_age_h"] <= w * 24)
+            if in_w >= min_candidates:
+                window_days = w
+                break
+            window_days = w
+    stats["window_days"] = window_days
+    windowed = [c for c in pool
+                if c["_age_h"] is None or c["_age_h"] <= window_days * 24]
+
     prio = {name: i for i, name in enumerate(lanes_by_priority)}
 
     def sort_key(c):
         d = parse_date(c["_date"])
         return (prio.get(c["lane"], 99), -c["_loc"], -(d.toordinal() if d else 0))
-    pool.sort(key=sort_key)
+    windowed.sort(key=sort_key)
 
     candidates = [{k: c[k] for k in ("company", "title", "location", "url", "date", "lane", "snippet", "source")}
-                  for c in pool[:args.max_candidates or cfg.get("discovery", {}).get("browse_target", 60)]]
+                  for c in windowed[:args.max_candidates or disc_cfg.get("browse_target", 60)]]
     stats["candidates"] = len(candidates)
     elapsed = time.time() - t0
 
@@ -552,6 +571,7 @@ def main():
     print(f"boards_ok={stats['boards_ok']} boards_failed={stats['boards_failed']} "
           f"li_queries_ok={stats['li_ok']}/{stats['li_ok']+stats['li_failed']} "
           f"jobs_pulled={stats['pulled']} deduped_skipped={stats['deduped']} "
+          f"window_d={stats['window_days']} "
           f"candidates={stats['candidates']} elapsed_s={elapsed:.1f} "
           f"watermark={run_n} closed_marked={closed_marked} health={health_tok}")
     if failed_boards:

@@ -8,7 +8,9 @@ schedule:
 
 discovery:
   browse_target: 50      # max API-prefiltered candidates the agent judges per run
-  shortlist_size: 10    # roles surfaced to the user per run
+  shortlist_size: 20     # roles surfaced to the user per run (fill stage filters further)
+  min_candidates: 20     # auto-scaling window expands until this many pre-filter roles
+  window_steps_days: [1, 3, 7, 14, 30]  # start 24h, expand stepwise while too few
 
 # One entry per resume. The agent matches each role to the best-fit lane
 # and uploads that lane's resume automatically.
@@ -53,12 +55,15 @@ storage:
   cache: "state/seen_roles.json"
 
 # Max age of a job posting to consider, in days.
+# NOTE: the auto-scaling window (discovery.window_steps_days) is now the
+# primary recency control — it starts at 24h and expands stepwise while fewer
+# than discovery.min_candidates roles are found. This setting is kept only as
+# a legacy fallback. The --max-age-days CLI flag overrides to a fixed window
+# for one-time backfills.
 #   0.5 = past 12 hours, 1 = past 24 hours, 3 = past 3 days, 7 = past week.
 # Applied best-effort: sources with built-in date filters (e.g. LinkedIn's
 # past-week) use them; other boards are checked by reading the posting date.
 # Boards that expose no date can't be filtered — those roles pass through.
-# Tight windows (12h) on a frequent schedule can yield empty shortlists;
-# that's fine, the pipeline just stays silent on empty runs.
 max_post_age_days: 7
 
 # If true, skip the user-selection step: all shortlisted roles go straight
