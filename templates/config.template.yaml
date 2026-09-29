@@ -79,3 +79,15 @@ auto_select: false
 # which scales to 10k+ entries without bloating this file.
 blacklist:
   companies: []
+
+# Curated job-list sources: community-maintained lists (GitHub repos / pages)
+# that publish fresh postings as tables (HTML <table> or markdown). They catch
+# companies with no public ATS API. Added during onboarding (ONBOARDING.md
+# Step 5): the agent searches for repos matching the user's target roles, the
+# user confirms, URLs are saved here.
+# Each entry: name, raw table URL, sections to include (substring match on the
+# section heading; empty = all sections).
+curated_sources:
+  - name: simplifyjobs-new-grad
+    url: https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/README.md
+    sections: ["Software Engineering", "Data Science"]

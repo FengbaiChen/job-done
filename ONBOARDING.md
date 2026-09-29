@@ -65,7 +65,27 @@ All browser tasks share one Chromium profile — the LinkedIn session is shared
 across tasks. Be upfront: LinkedIn's ToS technically prohibits automated
 access, so there is a small account-risk tradeoff; let the user decide.
 
-## Step 5 — Storage
+## Step 5 — Curated job lists (recommended)
+
+API polling covers companies with public ATS boards; LinkedIn covers the rest
+best-effort. Community-curated lists (GitHub repos updated daily with new-grad
+postings) fill the remaining gap — they aggregate companies with no public API
+at all. During this step:
+
+1. Based on the resumes (Step 1) and target roles (Step 2), search GitHub for
+   daily-updated new-grad job repos (e.g. "new grad positions 2026").
+2. Open the top candidates and check: updated recently, has a parseable table
+   (Company | Role | Location | Application | Age — HTML `<table>` or markdown
+   both work), covers the user's field.
+3. Propose 1–3 to the user with a one-line description each; the user confirms.
+4. Save confirmed URLs under `curated_sources:` in `config.yaml`, with the
+   sections to include (e.g. "Software Engineering", "Data Science").
+
+The pipeline fetches these tables every run and treats rows like any other
+source: dedupe, recency window, health monitoring. If a list's format drifts
+(0 parseable rows), the health check warns.
+
+## Step 6 — Storage
 
 Recommend: **Google Sheet** (human-facing tracker — shareable, phone-friendly) + **local `state/seen_roles.json`** (machine dedupe cache so browsed roles are never re-read). Alternative: local-only if they decline Google.
 
@@ -73,7 +93,7 @@ If Sheet: connect Google Sheets, create the tracker with columns:
 `Date | Company | Role | Location | Lane | Link | Confirmation | App ID | Status | Notes`
 Save the spreadsheet ID in `state/tracker.json`.
 
-## Step 6 — Config
+## Step 7 — Config
 
 Copy `templates/config.template.yaml` → `config.yaml` and fill it in with the user
 (the template's comments explain every field):
@@ -88,7 +108,7 @@ Copy `templates/config.template.yaml` → `config.yaml` and fill it in with the 
 - auto-select: skip the role-picking step and go straight to filling? (`auto_select` — for lazy users; submit approval is never skipped)
 - grad-date eligibility rules per lane if relevant
 
-## Step 7 — Go live
+## Step 8 — Go live
 
 Create the discovery cron(s) per the schedule (owner: the user's job-search goal or tracked item).
 

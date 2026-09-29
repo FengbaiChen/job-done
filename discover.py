@@ -34,7 +34,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from datetime import time as dtime
 
 SKILL_DIR = os.environ.get("JOB_PIPELINE_DIR", "/home/hatch/workspace/skills/job-pipeline")
@@ -215,6 +215,160 @@ def fetch_linkedin(query, pages):
         page_html = http_get_text(url, timeout=12)  # short timeout: never let LI stall the run
         out.extend(_parse_li_cards(page_html))
     return out
+
+def _curated_job_dict(company_raw, company, role, loc, apply_url, age_text,
+                     section):
+    """Shared dict builder for curated-list rows. Returns None to skip."""
+    m = re.search(r"(\d+)\s*d", age_text or "")
+    age_d = int(m.group(1)) if m else None
+    date_s = ((date.today() - timedelta(days=age_d)).isoformat()
+              if age_d is not None else "")
+    markers = "".join(
+        e for e in ("\U0001f6c2", "\U0001f1fa\U0001f1f8",  # 🛂 🇺🇸
+                    "\U0001f525", "\U0001f393")           # 🔥 🎓
+        if e in company_raw)
+    clean_company = re.sub(r"[^\w\s&.,'\-]", "", company).strip() or company
+    return {
+        "company": clean_company,
+        "title": re.sub(r"\*+", "", role).strip(),
+        "location": re.sub(r"\*+", "", loc).strip(),
+        "url": apply_url,
+        "date": date_s,
+        "snippet": f"[{section}]{' ' + markers if markers else ''}",
+    }
+
+
+def _parse_curated_html(text, sections):
+    """Parse <table> job lists (SimplifyJobs New-Grad-Positions format):
+    <tr> rows of Company | Role | Location | Application | Age, "↳" rows
+    reuse the previous company, 🔒 in the row means closed."""
+    jobs = []
+    for chunk in re.split(r"^##\s+", text, flags=re.M)[1:]:
+        header, _, body = chunk.partition("\n")
+        section = re.sub(r"^[^\w]+", "", header).strip()
+        if sections and not any(w.lower() in section.lower()
+                                for w in sections):
+            continue
+        last_company = ""
+        for tr in re.findall(r"<tr>(.*?)</tr>", body, flags=re.S):
+            if "\U0001f512" in tr:  # 🔒 closed posting
+                continue
+            tds = re.findall(r"<td[^>]*>(.*?)</td>", tr, flags=re.S)
+            if len(tds) < 5:
+                continue
+            strip = lambda h: htmlmod.unescape(
+                re.sub(r"<[^>]+>", "", h)).strip()
+            company_raw = strip(tds[0])
+            company = company_raw
+            if company == "↳" or not company:
+                company = last_company
+            else:
+                last_company = company
+            if not company:
+                continue
+            hrefs = re.findall(r'href="([^"]+)"', tds[3])
+            apply_url = next(
+                (u for u in hrefs
+                 if "simplify.jobs" not in u and "imgur.com" not in u), "")
+            if not apply_url:
+                continue
+            j = _curated_job_dict(company_raw, company, strip(tds[1]),
+                                  strip(tds[2]), apply_url, strip(tds[4]),
+                                  section)
+            if j:
+                jobs.append(j)
+    return jobs
+
+
+def _parse_curated_markdown(text, sections):
+    """Parse markdown-table job lists: | Company | Role | Location |
+    Application | Age |. Defensive about wrapped rows (joins consecutive
+    |-lines)."""
+    jobs = []
+    section, buf = "", ""
+    last_company = ""
+
+    def parse_row(b):
+        nonlocal last_company
+        cells = [c.strip() for c in b.strip().strip("|").split("|")]
+        if len(cells) < 5:
+            return None
+        if re.match(r"^:?-{2,}:?$", cells[0]) or cells[0].lower() == "company":
+            return None  # header / separator row
+        company_raw, role, loc, app_cell, age_cell = cells[:5]
+        company = re.sub(r"\*+", "", company_raw).strip()
+        if "\U0001f512" in company_raw:  # 🔒 closed posting
+            return None
+        if company == "↳" or not company:
+            company = last_company
+        else:
+            last_company = company
+        if not company:
+            return None
+        urls = [u.rstrip(").],\"'") for u in
+                re.findall(r"https?://\S+", app_cell)]
+        apply_url = next(
+            (u for u in urls
+             if "simplify.jobs" not in u and "imgur.com" not in u
+             and "camo.githubusercontent.com" not in u),
+            "")
+        if not apply_url:
+            return None
+        return _curated_job_dict(company_raw, company,
+                                 re.sub(r"\*+", "", role).strip(),
+                                 re.sub(r"\*+", "", loc).strip(),
+                                 apply_url, age_cell, section)
+
+    for raw in text.splitlines():
+        s = raw.strip()
+        if s.startswith("## "):
+            if buf:
+                j = parse_row(buf)
+                if j:
+                    jobs.append(j)
+                buf = ""
+            section = re.sub(r"^[^\w]+", "", s[3:]).strip()
+        elif s.startswith("|"):
+            buf += " " + s
+        elif buf:
+            j = parse_row(buf)
+            if j:
+                jobs.append(j)
+            buf = ""
+    if buf:
+        j = parse_row(buf)
+        if j:
+            jobs.append(j)
+
+    if sections:
+        wanted = [w.lower() for w in sections]
+        jobs = [j for j in jobs
+                if any(w in j["snippet"].lower() for w in wanted)]
+    return jobs
+
+
+def fetch_curated_list(url, sections):
+    """Fetch a community-curated job list and return job dicts.
+
+    Supports HTML <table> lists and markdown-table lists
+    (Company | Role | Location | Application | Age). `sections` is a
+    substring filter on the section heading (empty = all sections).
+    Best-effort: returns [] on any fetch/parse trouble so one bad list
+    never breaks the run.
+    """
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "muse-job-pipeline/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            text = r.read().decode("utf-8", "replace")
+    except Exception:
+        return []
+    try:
+        if "<table" in text:
+            return _parse_curated_html(text, sections)
+        return _parse_curated_markdown(text, sections)
+    except Exception:
+        return []
 
 # ------------------------------------------------- incremental state ---
 # Watermark + presence tracking let consecutive runs act incrementally and
@@ -489,6 +643,31 @@ def main():
     if stats["li_failed"] and not li_jobs_all:
         li_failed = f"{stats['li_failed']}/{stats['li_ok']+stats['li_failed']} queries failed"
     track_source("linkedin", li_jobs_all, failed=li_failed)
+
+    # Curated job-list sources (GitHub repos / pages publishing fresh postings
+    # as tables; configured during onboarding under `curated_sources`). Each is
+    # tracked as its own health source; rows flow through the same dedupe,
+    # newgrad/lane/location filters and recency window as everything else.
+    def fetch_curated(src):
+        try:
+            name = src.get("name") or src["url"]
+            jobs = fetch_curated_list(src["url"], src.get("sections", []))
+            return name, jobs, None
+        except Exception as e:  # noqa: BLE001
+            return src.get("name") or src.get("url", "?"), [], e
+
+    curated_cfg = cfg.get("curated_sources", []) or []
+    if curated_cfg:
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            for name, jobs, err in ex.map(fetch_curated, curated_cfg):
+                src_name = f"curated:{name}"
+                if err is not None:
+                    track_source(src_name, [], failed=type(err).__name__)
+                    continue
+                track_source(src_name, jobs)
+                for j in jobs:
+                    j["source"] = src_name
+                    consider(j)
 
     # Auto-scaling recency window: start tight (default 24h), expand stepwise
     # until min_candidates pool entries are in-window (or the max step hits).
