@@ -1,0 +1,7 @@
+# Personal / runtime files — never commit these.
+# The repo only holds the shareable playbook + templates.
+profile.yaml
+config.yaml
+references/standing-answers.md
+state/*
+!state/.gitkeep

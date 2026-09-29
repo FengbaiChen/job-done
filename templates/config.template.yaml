@@ -1,0 +1,60 @@
+# Job Pipeline config TEMPLATE — copy to config.yaml and fill in.
+# Safe to share (no personal data; personal data lives in profile.yaml).
+
+schedule:
+  # Local times the discovery run fires each day.
+  times: ["08:00", "12:00", "16:00", "20:00"]
+  timezone: "America/Los_Angeles"   # IANA timezone, e.g. "America/New_York"
+
+discovery:
+  browse_target: 50      # roles skimmed per run (dedupe cache keeps repeats cheap)
+  shortlist_size: 10    # roles surfaced to the user per run
+
+# One entry per resume. The agent matches each role to the best-fit lane
+# and uploads that lane's resume automatically.
+lanes:
+  - name: agent_infra
+    resume: "Your_Name_-_Agent_Infra.pdf"   # filename under your resumes folder
+    priority: 1                              # 1 = searched and shortlisted first
+    queries:
+      - "new grad software engineer agent infrastructure"
+      - "new grad AI agent platform engineer"
+  - name: ai_cloud
+    resume: "Your_Name_-_AI_Cloud.pdf"
+    priority: 2
+    queries:
+      - "new grad backend engineer cloud infrastructure"
+      - "new grad software engineer distributed systems"
+  - name: genai
+    resume: "Your_Name_-_GenAI.pdf"
+    priority: 3
+    queries:
+      - "new grad software engineer LLM"
+
+locations:
+  preferred: ["remote", "california"]
+  hybrid_ok: true
+  # relocation=true: other US locations are eligible but deprioritized in the shortlist.
+  # relocation=false: only preferred locations are kept.
+
+grad_rules:
+  # When a form only offers future graduation slots, pick the closest one
+  # to the real graduation date in profile.yaml. Format: YYYY-MM.
+  strategy: "closest_slot_to_2026-03"
+
+# How submit approvals work. Two modes:
+#   batch          — fill ALL selected roles, one combined review, "submit all" once. (default)
+#   per_application — fill → review → approve → submit → log, one role at a time.
+#                     Smaller turns; lets the user stop early.
+submit_review_mode: batch
+
+storage:
+  tracker: "google_sheet"          # spreadsheet id stored in state/tracker.json after creation
+  cache: "state/seen_roles.json"
+
+# Explicit never-apply list. Keep this SMALL — it is for companies the user
+# personally blacklists, not for already-applied ones.
+# Already-applied / already-seen roles live in state/seen_roles.json instead,
+# which scales to 10k+ entries without bloating this file.
+blacklist:
+  companies: []

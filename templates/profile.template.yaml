@@ -1,0 +1,42 @@
+# Applicant profile TEMPLATE — copy to profile.yaml and fill in.
+# PERSONAL. DO NOT SHARE this file once filled.
+# (Shareable parts of the skill: SKILL.md, ONBOARDING.md, templates/, references/)
+
+name: "Your Legal Name"
+preferred_name: "Nickname"          # used for "preferred name" fields; leave blank if none
+email: "you@example.com"
+phone: "+1 555-000-0000"
+address: "Street, City, ST ZIP"     # only used when a form has a street-address field
+location: "City, ST"
+linkedin: "https://www.linkedin.com/in/you/"
+github: "https://github.com/you"
+website: "https://you.github.io"    # leave blank if none
+
+earliest_start: "October 12, 2026"  # free text, e.g. "Immediately" or a date
+work_auth_us: true                  # authorized to work in the US?
+needs_sponsorship: true             # will need sponsorship now or in the future?
+immigration: "F1-OPT"               # e.g. "US citizen", "F1-OPT", "H-1B"
+relocation: true                    # open to relocate?
+recording_consent: true             # consent to AI interview recording?
+no_sat_act: false                   # true if you have no SAT/ACT (e.g. schooled abroad)
+
+education:                          # always entered manually; never trust auto-parse
+  - school: "University Name"
+    degree: "Bachelor of Science (BS)"
+    field: "Computer Science"
+    start: "2021-09"                # YYYY-MM
+    end: "2025-06"
+    gpa: 3.9                        # optional
+  # add more entries as needed (masters, etc.)
+
+resumes:                            # lane name -> file path, matching config.yaml lanes
+  agent_infra: "path/to/resume_agent_infra.pdf"
+  ai_cloud: "path/to/resume_ai_cloud.pdf"
+  genai: "path/to/resume_genai.pdf"
+transcript: "path/to/transcript.pdf"  # leave blank if none
+
+eeo:                                # voluntary self-ID answers
+  gender: "Male"                    # e.g. Male / Female / Non-binary / Decline
+  race: "Asian"                     # e.g. Asian / White / Black / Hispanic / Decline
+  veteran: "not a protected veteran"
+  disability: "none"                # "none" or "yes"
