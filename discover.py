@@ -34,6 +34,7 @@ import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
+from datetime import time as dtime
 
 SKILL_DIR = os.environ.get("JOB_PIPELINE_DIR", "/home/hatch/workspace/skills/job-pipeline")
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"}
@@ -135,6 +136,25 @@ def _li_date(dt_attr, time_inner):
         return date.fromordinal(date.today().toordinal() - days).isoformat()
     return ""
 
+def _li_age_hours(dt_attr, time_inner):
+    """Age of a LinkedIn posting in hours — lenient (minimum possible age).
+
+    Relative times ("X hours/days ago") convert directly to hours. A bare ISO
+    date is day-granularity, so assume end-of-day (youngest possible posting
+    time). Returns None when nothing is parseable (caller keeps the posting).
+    """
+    now = datetime.now()
+    m = _LI_REL.search(time_inner or "")
+    if m:
+        n, unit = int(m.group(1)), m.group(2).lower()
+        return float({"hour": n, "day": n * 24, "week": n * 7 * 24,
+                      "month": n * 30 * 24}[unit])
+    if dt_attr and re.match(r"\d{4}-\d{2}-\d{2}", dt_attr):
+        d = datetime.fromisoformat(dt_attr[:10]).date()
+        return max(0.0, (now - datetime.combine(d, dtime.max)).total_seconds() / 3600)
+    return None
+
+
 def _parse_li_cards(page_html):
     """Normalized job dicts from one LinkedIn guest-search page."""
     if len(page_html) > 300_000:  # poisoned/oversize page guard
@@ -160,6 +180,7 @@ def _parse_li_cards(page_html):
             "location": _clean(m_l.group(1)),
             "url": f"https://www.linkedin.com/jobs/view/{m_id.group(1)}",
             "date": _li_date(dt, inner),
+            "age_hours": _li_age_hours(dt, inner),
             "snippet": "",
             "source": "linkedin",
         })
@@ -304,7 +325,6 @@ def main():
     queries = [q for l in lanes_cfg for q in l.get("queries", [])]
     max_age = cfg.get("max_post_age_days", 7)
     blacklist = [b.lower() for b in (cfg.get("blacklist", {}) or {}).get("companies", [])]
-    today = date.today()
 
     stats = {"boards_ok": 0, "boards_failed": 0, "pulled": 0,
              "deduped": 0, "candidates": 0, "li_ok": 0, "li_failed": 0}
@@ -339,9 +359,17 @@ def main():
         lane = lane_of(text, lanes_by_priority)
         if not lane:
             return
-        # (e) recency (best-effort: unknown date -> keep)
-        d = parse_date(job.get("date", ""))
-        if d and (today - d).days > max_age:
+        # (e) recency — hour precision, lenient: LinkedIn relative times are
+        # exact; day-granularity dates assume end-of-day (minimum possible age);
+        # unknown dates are kept (best-effort, never drop on missing data).
+        max_age_hours = max_age * 24
+        age_h = job.get("age_hours")
+        if age_h is None:
+            d = parse_date(job.get("date", ""))
+            if d is not None:
+                now = datetime.now()
+                age_h = max(0.0, (now - datetime.combine(d, dtime.max)).total_seconds() / 3600)
+        if age_h is not None and age_h > max_age_hours:
             return
         # (f) location
         ls = loc_score(job.get("location", ""))
