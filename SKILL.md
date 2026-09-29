@@ -60,6 +60,8 @@ How the review works depends on `submit_review_mode` in config.yaml:
 
 Submit each approved application. Capture: confirmation text, timestamp, application/reference ID if shown. Append one row per application to the tracker. Mark each URL `"decision": "applied"` in `state/seen_roles.json`.
 
+Submission is always via the browser flow: fill per Stage 3, park at the final review screen, and click Submit only on the user's explicit "submit" / "submit all". Direct-POST submission was evaluated on 2026-09-29 and rejected — do not build or use HTTP submitters: Greenhouse's documented application POST requires an employer API key (Basic Auth); its hosted form is gated by invisible reCAPTCHA Enterprise (bot-scored submissions get HTTP 428 `captcha-failed` and a two-phase email security-code flow) and uploads resumes via presigned S3, so pure-HTTP submission cannot pass; Ashby's hosted submit needs reCAPTCHA + CSRF with v3 spam scoring; Lever/Workday expose no candidate POST path. The public `?questions=true` job endpoint remains the supported way to read a Greenhouse form's structure (used by `scripts/form_cache.py`).
+
 ### Stage 6 — Track (ongoing)
 
 The tracker is the source of truth. Optional: daily Gmail scan for recruiter replies → notify the user.
