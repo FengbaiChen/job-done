@@ -7,7 +7,7 @@ schedule:
   timezone: "America/Los_Angeles"   # IANA timezone, e.g. "America/New_York"
 
 discovery:
-  browse_target: 50      # roles skimmed per run (dedupe cache keeps repeats cheap)
+  browse_target: 50      # max API-prefiltered candidates the agent judges per run
   shortlist_size: 10    # roles surfaced to the user per run
 
 # One entry per resume. The agent matches each role to the best-fit lane

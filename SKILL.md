@@ -7,20 +7,24 @@ description: "Run the automated job-application pipeline: discover new-grad role
 
 ## Purpose
 
-An end-to-end, human-in-the-loop job application loop. Scheduled runs discover roles; the user selects; the agent fills; the user approves; the agent submits and logs. Personal data lives in `profile.yaml` and `state/` — never share those. Shareable parts: `SKILL.md`, `ONBOARDING.md`, `config.yaml` (as a template), `references/`.
+An end-to-end, human-in-the-loop job application loop. Scheduled runs discover roles; the user selects; the agent fills; the user approves; the agent submits and logs. Personal data lives in `profile.yaml` and `state/` — never share those. Shareable parts: `SKILL.md`, `discover.py`, `ONBOARDING.md`, `config.yaml` (as a template), `references/` (including the verified board list `company_boards.json`).
 
 ## Workflow
 
 ### Stage 1 — Discover (scheduled run, or "run the pipeline now")
 
-1. Read `config.yaml` and `state/seen_roles.json`.
-2. Browse ~`discovery.browse_target` roles across all lanes, highest lane priority first. Sources: LinkedIn Jobs, Ashby / Greenhouse / Workday company boards, YC jobs, aggregators, company career pages.
-3. For each candidate URL, check `state/seen_roles.json` FIRST. If seen, skip it entirely — never re-read a seen role (this is the token saver). Also skip companies in the `blacklist` in config.yaml (explicit never-apply list).
-4. Filter keepers: not in the `blacklist`, not already applied (check the tracker), posted within `max_post_age_days` (use the source's date filter where available — e.g. LinkedIn's past-week — otherwise read the posting date and drop stale ones; best-effort when a board exposes no date), new-grad eligible per config grad rules, location fit (preferred locations first; `relocation: yes` means other US locations are eligible but deprioritized), sponsorship plausibility.
-5. Lane-match each keeper (see Lane matching). Keep the top `discovery.shortlist_size`, ordered by lane priority then fit.
-6. Write EVERY browsed role to `state/seen_roles.json`: keepers → `"decision": "shortlisted"`; the rest → `"decision": "rejected"` with a short `"reason"`.
-7. Save the shortlist to `state/runs/<YYYY-MM-DD-HHMM>.json`.
-8. Shortlist non-empty → report it to the user for selection. Empty → stay silent.
+1. Run the API-first discovery script (non-interactive — it never prompts):
+   `python3 ~/workspace/skills/job-pipeline/discover.py`
+   It pulls every board in `references/company_boards.json` through their public JSON APIs (Greenhouse / Ashby — no login needed) plus the LinkedIn guest search API for each lane query in `config.yaml`, then applies programmatic filters in this order: dedupe against `state/seen_roles.json` FIRST (never re-surface a seen URL), `blacklist`, new-grad title signal, lane keywords, `max_post_age_days`, location fit. It writes the compact pre-filtered set to `state/discovery_candidates.json` and prints a one-line summary (boards OK, jobs pulled, candidates, seconds). Typical runtime is 1–3 minutes at ~10x lower token cost than browsing page by page.
+2. Read `state/discovery_candidates.json` and judge ONLY those candidates: verify new-grad eligibility, lane fit, and sponsorship plausibility per `config.yaml` and `references/standing-answers.md`. Open a posting page only when a candidate row leaves genuine doubt (a handful at most) — never re-browse the full list.
+3. Small web supplement (capped): 2–3 targeted web searches for fresh postings from companies with no public board API (YC Jobs has no stable public API; LinkedIn company pages beyond the guest search). Open at most ~10 pages total, and check `state/seen_roles.json` before opening any URL.
+4. Keep the top `discovery.shortlist_size`, ordered by lane priority then fit.
+5. Write EVERY judged role (candidates you evaluated + supplement pages you opened) to `state/seen_roles.json`: keepers → `"decision": "shortlisted"`; the rest → `"decision": "rejected"` with a short `"reason"`.
+6. Save the shortlist to `state/runs/<YYYY-MM-DD-HHMM>.json`.
+7. Shortlist non-empty → present it to the user for selection (company, role, location, lane, link, one-line fit note). Empty → stay silent.
+8. Everything in this stage is non-interactive: never ask the user questions mid-run.
+
+To cover a new company, add its board to `references/company_boards.json` (`greenhouse` token or `ashby` org slug, verified live against the public API) — the next run picks it up automatically.
 
 ### Stage 2 — Select (user, unless auto_select)
 

@@ -8,7 +8,7 @@ An automated job-application pipeline that runs inside [Muse](https://muse.ai) (
 
 Six stages, running as a loop:
 
-1. **Discover** — on a schedule (default 4× daily), the agent browses ~50 roles across your lanes, dedupes against everything it has ever seen, and shortlists the top 10.
+1. **Discover** — on a schedule (default 4× daily), `discover.py` pulls ~40 curated company boards via public job-board APIs plus LinkedIn guest search, filters programmatically (dedupe, new-grad signal, lane keywords, recency, location), and the agent judges only the pre-filtered candidates before shortlisting the top 10.
 2. **Select** — you pick which roles to pursue.
 3. **Prepare** — the agent fills each application completely: standing answers, manually entered education (never trusting resume auto-parse), resume + transcript upload, drafted free-text answers. It stops before Submit.
 4. **Approve** — you review. `batch` mode: one combined review, then "submit all". `per_application` mode: approve each role as it comes.
