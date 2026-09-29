@@ -23,6 +23,7 @@ An end-to-end, human-in-the-loop job application loop. Scheduled runs discover r
 6. Save the shortlist to `state/runs/<YYYY-MM-DD-HHMM>.json`.
 7. Shortlist non-empty → present it to the user for selection (company, role, location, lane, link, one-line fit note). Empty → stay silent.
 8. Everything in this stage is non-interactive: never ask the user questions mid-run.
+9. Source health (overrides the stay-silent rule): read the `health=` token of the discovery one-line summary. If any source is WARN/FAIL, tell the user which source and the symptom (e.g. "board:Acme — fetch failed (Timeout)", "linkedin — newest item 200h old") even when the shortlist is empty. In normal (non-empty) reports, append one line: `Sources: 41/41 healthy` (or list the degraded ones). The per-source history lives in `state/source_health.json`.
 
 To cover a new company, add its board to `references/company_boards.json` (`greenhouse` token or `ashby` org slug, verified live against the public API) — the next run picks it up automatically.
 

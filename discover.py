@@ -19,8 +19,9 @@ Outputs (real runs only; --dry-run writes nothing):
     state/discovery_watermark.json   ({"last_successful_run": ISO ts, "runs": n})
     state/job_presence.json          ({url: {"run": n, "run_id": "YYYY-MM-DD-HHMM"}})
     state/seen_roles.json            (updated in place: absent-3-runs jobs -> "closed")
+    state/source_health.json         (per-source pulled history + status)
     stdout: one-line summary (boards, jobs pulled, filtered, candidates, seconds,
-            watermark run counter, newly-closed count)
+            watermark run counter, newly-closed count, per-source health)
 """
 import argparse
 import html as htmlmod
@@ -155,6 +156,22 @@ def _li_age_hours(dt_attr, time_inner):
     return None
 
 
+def _job_age_hours(job):
+    """Age of any normalized job dict in hours (lenient), or None if unknown.
+
+    LinkedIn jobs carry a precise ``age_hours``; board jobs fall back to their
+    ISO date assuming end-of-day (minimum possible age). Unknown -> None.
+    """
+    age_h = job.get("age_hours")
+    if age_h is not None:
+        return float(age_h)
+    d = parse_date(job.get("date", ""))
+    if d is None:
+        return None
+    now = datetime.now()
+    return max(0.0, (now - datetime.combine(d, dtime.max)).total_seconds() / 3600)
+
+
 def _parse_li_cards(page_html):
     """Normalized job dicts from one LinkedIn guest-search page."""
     if len(page_html) > 300_000:  # poisoned/oversize page guard
@@ -249,6 +266,46 @@ def close_absent_jobs(presence, seen, current_n):
         closed += 1
     return closed
 
+# ------------------------------------------------- source health -----
+# Per-source liveness monitoring: every run records, for each of the 40 ATS
+# boards plus LinkedIn (aggregated), how many parseable jobs it returned and
+# how fresh the newest one was. Anomalies (fetch failure, zero parseable jobs,
+# volume collapse vs history, or a newest item older than STALE_WARN_HOURS)
+# are reported in the one-line summary so the scheduled run can alert the user
+# instead of staying silent on an empty shortlist.
+HEALTH_HIST_LEN = 10   # pulled-count history kept per source
+HEALTH_MIN_HIST = 3    # runs of history before volume-drop alerts fire
+STALE_WARN_HOURS = 168  # newest item older than this (7d) -> stale warning
+
+def load_health():
+    try:
+        with open(f"{SKILL_DIR}/state/source_health.json") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def _median(xs):
+    s = sorted(xs)
+    n = len(s)
+    return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
+
+def eval_source_health(name, pulled, newest_age_h, failed, hist):
+    """(status, note); status in ok/warn/fail. Lenient by design: needs
+    repeated evidence (history) before crying volume-drop. The staleness check
+    applies to LinkedIn only — small ATS boards legitimately go months without
+    a new posting, so "oldest newest-item" is not a breakage signal for them."""
+    if failed:
+        return "fail", f"fetch failed ({failed})"
+    if pulled == 0:
+        return "warn", "0 parseable jobs returned"
+    if name == "linkedin" and newest_age_h is not None and newest_age_h > STALE_WARN_HOURS:
+        return "warn", f"newest item {newest_age_h:.0f}h old — LinkedIn may be serving stale data"
+    if len(hist) >= HEALTH_MIN_HIST:
+        med = _median(hist)
+        if med > 0 and pulled < 0.25 * med:
+            return "warn", f"volume drop: {pulled} vs median {med:.0f}"
+    return "ok", ""
+
 # ---------------------------------------------------------------- filters ---
 NEWGRAD = re.compile(
     r"new[\s\-]?grad|entry[\s\-]?level|university grad|early career"
@@ -332,6 +389,14 @@ def main():
     seen_urls = set()  # in-run dedupe: same posting can surface via multiple queries
     pulled_urls = []   # every job URL fetched this run (for presence tracking)
     pool = []
+    src_stats = {}     # source name -> {"pulled", "newest_age_h", "failed"}
+
+    def track_source(name, jobs, failed=None):
+        ages = [_job_age_hours(j) for j in jobs]
+        ages = [a for a in ages if a is not None]
+        src_stats[name] = {"pulled": len(jobs),
+                           "newest_age_h": min(ages) if ages else None,
+                           "failed": failed}
 
     def consider(job, board_company=""):
         stats["pulled"] += 1
@@ -363,12 +428,7 @@ def main():
         # exact; day-granularity dates assume end-of-day (minimum possible age);
         # unknown dates are kept (best-effort, never drop on missing data).
         max_age_hours = max_age * 24
-        age_h = job.get("age_hours")
-        if age_h is None:
-            d = parse_date(job.get("date", ""))
-            if d is not None:
-                now = datetime.now()
-                age_h = max(0.0, (now - datetime.combine(d, dtime.max)).total_seconds() / 3600)
+        age_h = _job_age_hours(job)
         if age_h is not None and age_h > max_age_hours:
             return
         # (f) location
@@ -395,11 +455,14 @@ def main():
 
     with ThreadPoolExecutor(max_workers=10) as ex:
         for b, jobs, err in ex.map(fetch_board, boards):
+            src_name = f"board:{b['company']}"
             if err is not None:
                 stats["boards_failed"] += 1
                 failed_boards.append(f"{b['company']}({type(err).__name__})")
+                track_source(src_name, [], failed=type(err).__name__)
                 continue
             stats["boards_ok"] += 1
+            track_source(src_name, jobs)
             for j in jobs:
                 consider(j, board_company=b["company"])
 
@@ -412,13 +475,21 @@ def main():
             return q, [], e
 
     with ThreadPoolExecutor(max_workers=4) as ex:
+        li_jobs_all = []
         for q, jobs, err in ex.map(fetch_li_query, queries):
             if err is not None:
                 stats["li_failed"] += 1
                 continue
             stats["li_ok"] += 1
+            li_jobs_all.extend(jobs)
             for j in jobs:
                 consider(j)
+    # LinkedIn tracked as one aggregate source (per-query volumes are too small
+    # for stable anomaly detection).
+    li_failed = None
+    if stats["li_failed"] and not li_jobs_all:
+        li_failed = f"{stats['li_failed']}/{stats['li_ok']+stats['li_failed']} queries failed"
+    track_source("linkedin", li_jobs_all, failed=li_failed)
 
     prio = {name: i for i, name in enumerate(lanes_by_priority)}
 
@@ -456,13 +527,37 @@ def main():
             json.dump({"generated_at": datetime.now().isoformat(timespec="seconds"),
                        "candidates": candidates}, f, indent=1)
 
+    # Source health: evaluate every run; persist only on real runs.
+    health = load_health()
+    health_alerts = []
+    for name, s in src_stats.items():
+        entry = health.get(name, {"pulled_hist": []})
+        hist = entry.get("pulled_hist", [])
+        status, note = eval_source_health(name, s["pulled"], s["newest_age_h"],
+                                          s["failed"], hist)
+        if not args.dry_run:
+            hist = (hist + [s["pulled"]])[-HEALTH_HIST_LEN:]
+            health[name] = {"pulled_hist": hist, "last_pulled": s["pulled"],
+                            "last_newest_age_h": s["newest_age_h"],
+                            "last_run": run_id, "status": status, "note": note}
+        if status != "ok":
+            health_alerts.append(f"{name}: {note}")
+    if not args.dry_run:
+        with open(f"{SKILL_DIR}/state/source_health.json", "w") as f:
+            json.dump(health, f, indent=1)
+    n_src = len(src_stats)
+    n_ok = n_src - len(health_alerts)
+    health_tok = f"ok({n_ok}/{n_src})" if not health_alerts else f"WARN({len(health_alerts)})"
+
     print(f"boards_ok={stats['boards_ok']} boards_failed={stats['boards_failed']} "
           f"li_queries_ok={stats['li_ok']}/{stats['li_ok']+stats['li_failed']} "
           f"jobs_pulled={stats['pulled']} deduped_skipped={stats['deduped']} "
           f"candidates={stats['candidates']} elapsed_s={elapsed:.1f} "
-          f"watermark={run_n} closed_marked={closed_marked}")
+          f"watermark={run_n} closed_marked={closed_marked} health={health_tok}")
     if failed_boards:
         print("failed_boards: " + ", ".join(failed_boards[:10]))
+    if health_alerts:
+        print("health_alerts: " + "; ".join(health_alerts[:10]))
     if args.dry_run:
         for c in candidates[:15]:
             print(f"  - [{c['lane']}] {c['company']} — {c['title']} ({c['location']}, {c['date']})")
