@@ -1,0 +1,50 @@
+{
+ "_comment": "Starter board list for new users (copy to references/company_boards.json during onboarding, then extend via the brand-recommendation step). All tokens verified live on 2026-09-29.",
+ "boards": [
+  {
+   "company": "Airbnb",
+   "platform": "greenhouse",
+   "token": "airbnb"
+  },
+  {
+   "company": "Coinbase",
+   "platform": "greenhouse",
+   "token": "coinbase"
+  },
+  {
+   "company": "Datadog",
+   "platform": "greenhouse",
+   "token": "datadog"
+  },
+  {
+   "company": "Duolingo",
+   "platform": "greenhouse",
+   "token": "duolingo"
+  },
+  {
+   "company": "Reddit",
+   "platform": "greenhouse",
+   "token": "reddit"
+  },
+  {
+   "company": "Discord",
+   "platform": "greenhouse",
+   "token": "discord"
+  },
+  {
+   "company": "Robinhood",
+   "platform": "greenhouse",
+   "token": "robinhood"
+  },
+  {
+   "company": "Dropbox",
+   "platform": "greenhouse",
+   "token": "dropbox"
+  },
+  {
+   "company": "Figma",
+   "platform": "greenhouse",
+   "token": "figma"
+  }
+ ]
+}

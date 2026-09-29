@@ -1,13 +1,15 @@
 # Job Pipeline — Technical Report
 
-**An autonomous, human-in-the-loop job-application pipeline for new-grad software engineering roles.**
+**An autonomous, human-in-the-loop job-application pipeline.**
 Repo: https://github.com/xf-mike/muse-job-pipeline · Published 2026-09-29
 
 ---
 
 ## Abstract
 
-Job Pipeline is an end-to-end automation loop that discovers new-grad software engineering roles, shortlists them, fills out applications, and tracks recruiter correspondence — while keeping the human in control of every submission. It is distributed as a portable **skill** (a `SKILL.md` playbook plus scripts, templates, and onboarding docs) but what actually runs is a **pipeline**: scheduled agents, incremental state, a tracker spreadsheet, and a dedicated chat channel, operating four times a day without being asked.
+Job Pipeline is an end-to-end automation loop that discovers job postings matching your profile, shortlists them, fills out applications, and tracks recruiter correspondence — while keeping the human in control of every submission. It is distributed as a portable **skill** (a `SKILL.md` playbook plus scripts, templates, and onboarding docs) but what actually runs is a **pipeline**: scheduled agents, incremental state, a tracker spreadsheet, and a dedicated chat channel, operating four times a day without being asked.
+
+The pipeline is domain-agnostic: lanes, title filters, target companies, and locations are all configuration. It was built and battle-tested on a **new-grad software-engineering hunt** (the deployment that produced the numbers cited in this report), which serves as the worked example throughout.
 
 The system's central design bet is **token economics**: every stage is engineered to minimize LLM calls — API-first discovery, programmatic pre-filtering, batched judging, cached form structures, and an answer bank for free-text questions. The LLM is spent only where judgment is genuinely required.
 
@@ -28,15 +30,19 @@ Job Pipeline automates the *legwork* of a job hunt (finding roles, filling forms
 Prerequisites: a personal AI agent environment (the pipeline was built on Muse), a Google account (for the tracker sheet + Gmail), and your resumes.
 
 1. Clone the repo into your agent's skills folder (`~/workspace/skills/job-pipeline/`).
-2. Follow `ONBOARDING.md` in conversation with your agent — six steps:
-   - **Step 1 — Resumes.** Provide one resume per lane (e.g. agent/infra, AI/cloud, GenAI). Each lane auto-selects its resume at fill time.
-   - **Step 2 — Profile.** Confirm the agent's draft of your profile (name, contact, education, work authorization, EEO, links) and fill the gaps it flags.
-   - **Step 3 — Connect Gmail (required, not optional).** Two reasons: recruiter-reply tracking, and one-time verification codes that some application sites demand mid-flow. Without it, those applications cannot complete.
-   - **Step 4 — Storage.** The agent creates your private Google Sheet tracker ("Job Applications Tracker": an `Applications` tab and a `Run History` tab).
-   - **Step 5 — Config.** Review `config.yaml`: your three lanes and their priority, search queries, `max_post_age_days`, `shortlist_size`, `submit_review_mode` (`batch`/`per_application`), `auto_select`, and the company `blacklist`.
-   - **Step 6 — Go live.** The agent enables the scheduled runs and drops reports into a dedicated side chat.
+2. Follow `ONBOARDING.md` in conversation with your agent — ten steps:
+   - **Step 1 — Resumes.** Provide 1–3 resumes; the agent extracts your profile.
+   - **Step 2 — Confirm + fill gaps.** You confirm the extracted profile and fill what's missing (start date, relocation, EEO, work authorization…).
+   - **Step 3 — Target roles.** You discuss the hunt; the agent turns it into lanes (one per resume, with keywords + search queries), `title_include`/`title_exclude` filters, and industry/function tags.
+   - **Step 4 — Brand set.** The agent *recommends* 15–25 companies from `references/board_directory.json` (a tagged pool of companies with verified public ATS-board APIs) instead of asking you to list companies; you confirm, it verifies each board API live, and writes your `references/company_boards.json`.
+   - **Step 5 — Curated job lists.** The agent finds daily-updated community job lists (e.g. GitHub new-grad repos); you confirm; URLs go under `curated_sources:`.
+   - **Step 6 — Connect Gmail (required, not optional).** Two reasons: recruiter-reply tracking, and one-time verification codes that some application sites demand mid-flow. Without it, those applications cannot complete.
+   - **Step 7 — LinkedIn login (recommended).** User-takeover login — the assistant never sees the password; the session is shared across fill tasks.
+   - **Step 8 — Storage.** The agent creates your private Google Sheet tracker ("Job Applications Tracker": an `Applications` tab and a `Run History` tab).
+   - **Step 9 — Config.** Review the generated `config.yaml` (lanes, filters, schedule, locations, `submit_review_mode`, `blacklist`…).
+   - **Step 10 — Go live.** The agent enables the scheduled runs and drops reports into a dedicated side chat.
 
-Your `profile.yaml`, `config.yaml`, and `state/` are gitignored — they never leave your machine.
+Your `profile.yaml`, `config.yaml`, `references/company_boards.json`, and `state/` are gitignored — they never leave your machine.
 
 ### 1.3 Daily operation
 
@@ -60,10 +66,13 @@ Once live, the pipeline runs itself:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `lanes[].name/priority/queries` | 3 lanes | Search lanes in priority order; each lane carries its own queries and resume |
+| `lanes[].name/priority/keywords/queries` | — | Search lanes in priority order; each lane carries keywords (lane assignment), queries (LinkedIn search), and its resume |
+| `discovery.title_include` | new-grad patterns | Regex fragments; a posting must match ≥1 (e.g. an experienced hire uses `senior|staff`) |
+| `discovery.title_exclude` | `intern` | Regex fragments; any match on the title drops the posting |
 | `discovery.browse_target` | 50 | Candidate ceiling the agent judges per run |
-| `discovery.shortlist_size` | 10 | Roles surfaced to you per run |
-| `max_post_age_days` | 0.5 | Posting freshness window (0.5 = 12h, hour-precision, lenient — §2.3) |
+| `discovery.shortlist_size` | 20 | Roles surfaced to you per run |
+| `discovery.window_steps_days` / `min_candidates` | [1,3,7,14,30] / 20 | Auto-scaling recency window: starts 24h, expands while too few candidates |
+| `curated_sources` | — | Community job lists (name, table URL, sections) fetched every run |
 | `submit_review_mode` | `batch` | `batch`: one combined review; `per_application`: review each as filled |
 | `auto_select` | `false` | Skip the selection step and fill the whole shortlist |
 | `blacklist.companies` | — | Never surface these companies |
@@ -84,11 +93,13 @@ State is the connective tissue: `state/seen_roles.json` (every judged URL + deci
 
 ### 2.2 Discovery sources — and how each is handled
 
-**2.2.1 Company ATS boards — 40 verified boards (26 Ashby, 14 Greenhouse).**
-Each board is registered in `references/company_boards.json` with its platform token (Greenhouse board token or Ashby org slug), verified live against the vendor's *public* JSON API — no authentication, no scraping of rendered pages. Boards are fetched concurrently (thread pool, per-board failure isolation: one dead board never stalls the run). A typical run pulls ~7,000 raw listings in ~25 seconds.
+**2.2.1 Company ATS boards — the highest-recall source.**
+Each board is registered in the user's `references/company_boards.json` with its platform token (Greenhouse board token or Ashby org slug), verified live against the vendor's *public* JSON API — no authentication, no scraping of rendered pages. Boards are fetched concurrently (thread pool, per-board failure isolation: one dead board never stalls the run). In the reference deployment, 40 boards pull ~7,000 raw listings in ~25 seconds.
 
 - *Greenhouse handling:* the public board API for listings; the documented `?questions=true` job endpoint for full application-form structure (labels, types, required flags) — this powers the form cache (§2.6), no HTML parsing involved.
 - *Ashby handling:* the public posting API; form introspection is best-effort (Ashby exposes less structure publicly), so unknown fields fall back to individual browser attention.
+
+How a user's board list is built (ONBOARDING.md Step 4): the repo ships `references/board_directory.json`, a tagged pool of companies with verified public ATS-board APIs (industry/function tags). The agent recommends 15–25 companies matching the user's Step-3 tags, the user confirms, and each token is re-verified live before being written to the user's gitignored `references/company_boards.json`. A starter template (`templates/company_boards.template.json`, ~10 generic companies) gives coverage from minute one. Runtime source-health monitoring warns if a board goes quiet (company switched ATS, token died).
 
 **2.2.2 LinkedIn guest API — 8 lane queries × 2 pages × 10 cards.**
 The unauthenticated `jobs-guest` search endpoint is queried per lane query. Result cards are parsed with targeted regexes (title, company, location, posting URL, timestamp). Relative timestamps ("5 hours ago", "2 days ago") are converted to **hours** at parse time — this is what enables true hour-precision recency filtering (§2.3). Short per-source timeouts: if LinkedIn stalls, the run continues without it.
@@ -96,16 +107,19 @@ The unauthenticated `jobs-guest` search endpoint is queried per lane query. Resu
 **2.2.3 Web supplement — capped, not the default.**
 Some targets expose no stable public API (notably YC Jobs). A small supplement — 2–3 targeted searches, at most ~10 page opens per run, every URL checked against the seen-cache first — covers these. This path exists deliberately as a *minority* supplement: the old approach of browsing dozens of pages per run was measured at ~10× the token cost and is never the primary method.
 
+**2.2.4 Curated job lists — community tables as a source.**
+Community-maintained job lists (e.g. GitHub repos publishing daily new-grad postings as tables) aggregate companies with no public ATS API — the exact gap board polling can't cover. `fetch_curated_list` parses HTML `<table>` and markdown tables (Company | Role | Location | Application | Age), extracts the direct application URL (skipping tracker/affiliate links), computes posting age from the Age column, skips closed (🔒) rows, and resolves "↳" continuation rows to the previous company. Rows then flow through the identical dedupe/filter/recency/health path as every other source. Lists are registered under `curated_sources:` during onboarding (user-confirmed); a format drift that yields 0 parseable rows trips the health check's WARN.
+
 ### 2.3 The filter cascade (programmatic, zero LLM)
 
 Every pulled listing passes through `consider()` in `discover.py`, in this order:
 
 1. **Dedupe first** — URL seen in `state/seen_roles.json` (or earlier in this run) → dropped. Nothing is ever re-read.
 2. **Blacklist** — user-declared never-apply companies.
-3. **Internship exclusion** — `\bintern(ship)?s?\b` in the title; this pipeline targets full-time new-grad roles only.
-4. **New-grad signal** — regex over title + snippet (e.g. "new grad", "university graduate", class-year markers). Listings without an explicit new-grad signal are dropped *before* any LLM sees them.
-5. **Lane keyword match** — assigned to the highest-priority matching lane (`agent_infra` → `ai_cloud` → `genai`); unmatched listings are dropped.
-6. **Recency, hour-precision, lenient** — `max_post_age_days × 24` compared against the posting's age in hours. LinkedIn relative times are exact; day-granularity board dates assume end-of-day (minimum possible age — a posting dated yesterday still passes in the morning run); unknown dates are always kept. Never drop on missing data.
+3. **Title exclude** — `discovery.title_exclude` regexes against the title (default: internship postings). Any match drops the listing.
+4. **Title include** — `discovery.title_include` regexes over title + snippet. Listings matching none are dropped *before* any LLM sees them. (In the reference new-grad deployment this is the new-grad signal: "new grad", "entry level", class-year markers, etc.)
+5. **Lane keyword match** — each lane's `keywords` (config) matched against title + snippet; assigned to the highest-priority matching lane; unmatched listings are dropped.
+6. **Recency, hour-precision, lenient** — the auto-scaling window (`discovery.window_steps_days`, default starting 24h and expanding while fewer than `discovery.min_candidates` roles are in-window) compared against the posting's age in hours. LinkedIn relative times are exact; day-granularity board dates assume end-of-day (minimum possible age — a posting dated yesterday still passes in the morning run); unknown dates are always kept. Never drop on missing data. (`--max-age-days` overrides to a fixed window for one-time backfills.)
 7. **Location scoring** — remote / California / hybrid preferred; `relocation=yes` keeps other US locations eligible but deprioritized; zero-score locations are dropped.
 
 Survivors (typically ~10–15 of ~7,000) are written to `state/discovery_candidates.json` — a ~1.2k-token file. Only then does the LLM get involved.
@@ -218,18 +232,19 @@ Star counts from search snippets may be weeks stale; two figures (career-ops ~43
 
 ```
 SKILL.md                  # the playbook (this report's subject)
-ONBOARDING.md             # 6-step conversational setup
+ONBOARDING.md             # 10-step conversational setup
 discover.py               # API-first discovery + filter cascade (stdlib only)
 scripts/
   qa_match.py             # answer-bank fuzzy matching
   form_cache.py           # ATS form-structure cache
   gmail_scan.py           # watermarked reply tracking
 references/
-  company_boards.json     # 40 verified boards (26 Ashby + 14 Greenhouse)
+  board_directory.json    # tagged pool of verified ATS boards (recommendation source)
   standing-answers.md     # one-time user decisions, applied silently
 templates/
   config.template.yaml    # shareable config (no personal data)
+  company_boards.template.json  # starter board list → user's references/company_boards.json
   profile.template.yaml
 ```
 
-`profile.yaml`, `config.yaml`, and `state/` are gitignored and never published.
+`profile.yaml`, `config.yaml`, `references/company_boards.json`, and `state/` are gitignored and never published.

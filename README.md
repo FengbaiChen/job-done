@@ -1,6 +1,8 @@
 # Muse Job Pipeline
 
-An automated job-application pipeline that runs inside [Muse](https://muse.ai) (Meta's personal AI agent). It discovers new-grad software engineering roles on a schedule, shortlists the best fits, fills out applications with your standing answers, waits for your approval before anything is submitted, and logs everything to a Google Sheet.
+An automated job-application pipeline that runs inside [Muse](https://muse.ai) (Meta's personal AI agent). It discovers job postings matching your profile on a schedule, shortlists the best fits, fills out applications with your standing answers, waits for your approval before anything is submitted, and logs everything to a Google Sheet.
+
+It is domain-agnostic: lanes, title filters, target companies, and locations are all configuration. It was built and battle-tested on a new-grad software-engineering hunt, which is used as the worked example throughout the docs.
 
 > **If you are an AI agent** reading this repo to set this up for your user: open [`ONBOARDING.md`](ONBOARDING.md) and follow it step by step **in conversation with them**. Copy each file in `templates/` to its live filename (`config.template.yaml` → `config.yaml`, etc.) and fill it in from what the user tells you — never invent personal data. The template comments explain every field; treat them as your setup instructions.
 
@@ -8,7 +10,7 @@ An automated job-application pipeline that runs inside [Muse](https://muse.ai) (
 
 Six stages, running as a loop:
 
-1. **Discover** — on a schedule (default 4× daily), `discover.py` pulls ~40 curated company boards via public job-board APIs plus LinkedIn guest search, filters programmatically (dedupe, new-grad signal, lane keywords, recency, location), and the agent judges only the pre-filtered candidates before shortlisting the top 10.
+1. **Discover** — on a schedule (default 4× daily), `discover.py` pulls curated company ATS boards via public job-board APIs plus LinkedIn guest search and community job lists, filters programmatically (dedupe, title include/exclude, lane keywords, recency, location), and the agent judges only the pre-filtered candidates before shortlisting the top N.
 2. **Select** — you pick which roles to pursue.
 3. **Prepare** — the agent fills each application completely: standing answers, manually entered education (never trusting resume auto-parse), resume + transcript upload, drafted free-text answers. Free-text answers are reused from a Q&A answer bank when a user-approved answer matches (`scripts/qa_match.py`); the LLM drafts only genuinely new questions, once. Per-ATS form structures are cached (`scripts/form_cache.py`), so a form is never re-parsed from scratch. Email verification codes are fetched on demand only: if a fill task parks at a verification step, the agent does one targeted Gmail lookup for that single fresh message, uses the code once, and never stores it. It stops before Submit.
 4. **Approve** — you review. `batch` mode: one combined review, then "submit all". `per_application` mode: approve each role as it comes.
@@ -47,7 +49,9 @@ Once set up, just talk to your agent:
 | `scripts/qa_match.py` | Answer-bank matcher — reuses user-approved free-text answers, LLM drafts only new questions |
 | `scripts/form_cache.py` | Per-ATS application-form structure cache — forms are never re-parsed from scratch |
 | `scripts/gmail_scan.py` | Read-only Gmail scan — recruiter replies + confirmation emails, watermarked and incremental, matched against the tracker |
-| `references/` | Live standing answers (created during setup, never committed) |
+| `references/board_directory.json` | Recommendation pool: companies with verified public ATS-board APIs, tagged by industry/function — onboarding recommends a brand set from it instead of asking the user to list companies |
+| `templates/company_boards.template.json` | Starter board list (~10 generic companies) → becomes the user's `references/company_boards.json` (gitignored, never committed) |
+| `references/` | Live per-user files created during setup (standing answers, own board list — never committed) |
 | `state/` | Runtime state: dedupe cache + run logs (never committed) |
 
 **Design note:** the dedupe cache (`state/seen_roles.json`) holds every role ever browsed, so `config.yaml` stays small no matter how many thousands of applications you process. The `.gitignore` keeps all personal data out of the repo — what you share is always safe to share.

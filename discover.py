@@ -461,12 +461,29 @@ def eval_source_health(name, pulled, newest_age_h, failed, hist):
     return "ok", ""
 
 # ---------------------------------------------------------------- filters ---
-NEWGRAD = re.compile(
+# Title include/exclude filters are config-driven
+# (discovery.title_include / discovery.title_exclude in config.yaml).
+# Defaults below preserve the original new-grad SDE behavior so existing
+# configs keep working unchanged.
+_DEFAULT_TITLE_INCLUDE = (
     r"new[\s\-]?grad|entry[\s\-]?level|university grad|early career"
-    r"|\bjunior\b|\b2026\b|\b2027\b|newgrad|recent grad", re.I)
+    r"|\bjunior\b|\b2026\b|\b2027\b|newgrad|recent grad")
+_DEFAULT_TITLE_EXCLUDE = r"\bintern(ship)?s?\b"
 
-# Lane keywords derived from SKILL.md "Lane matching" + config lane queries.
-LANE_KEYWORDS = {
+def compile_title_filters(cfg):
+    d = (cfg.get("discovery") or {})
+    inc = d.get("title_include") or [_DEFAULT_TITLE_INCLUDE]
+    exc = d.get("title_exclude") or [_DEFAULT_TITLE_EXCLUDE]
+    if isinstance(inc, str):
+        inc = [inc]
+    if isinstance(exc, str):
+        exc = [exc]
+    return (re.compile("|".join(f"(?:{p})" for p in inc), re.I),
+            re.compile("|".join(f"(?:{p})" for p in exc), re.I))
+
+# Lane keywords live on each lane in config.yaml (lane.keywords).
+# _LEGACY_LANE_KEYWORDS keeps configs without a keywords key working.
+_LEGACY_LANE_KEYWORDS = {
     "agent_infra": ["agent", "agentic", "inference", "serving", "infra",
                     "kernel", "distributed", "ml system", "machine learning",
                     "llm", "foundation model", "training", "gpu", "cuda",
@@ -479,11 +496,12 @@ LANE_KEYWORDS = {
               "conversational"],
 }
 
-def lane_of(text, lanes_by_priority):
-    for lane in lanes_by_priority:
-        for kw in LANE_KEYWORDS.get(lane, []):
+def lane_of(text, lanes_cfg):
+    for lane in lanes_cfg:
+        kws = lane.get("keywords") or _LEGACY_LANE_KEYWORDS.get(lane["name"], [])
+        for kw in kws:
             if re.search(r"\b" + re.escape(kw) + r"\b", text, re.I):
-                return lane
+                return lane["name"]
     return None
 
 _US_STATE = re.compile(r",\s*[A-Z]{2}\b")
@@ -537,6 +555,7 @@ def main():
     lanes_by_priority = [l["name"] for l in lanes_cfg]
     queries = [q for l in lanes_cfg for q in l.get("queries", [])]
     blacklist = [b.lower() for b in (cfg.get("blacklist", {}) or {}).get("companies", [])]
+    title_include_re, title_exclude_re = compile_title_filters(cfg)
 
     stats = {"boards_ok": 0, "boards_failed": 0, "pulled": 0,
              "deduped": 0, "candidates": 0, "li_ok": 0, "li_failed": 0}
@@ -569,14 +588,13 @@ def main():
         if any(b in company.lower() for b in blacklist):
             return
         text = f"{job.get('title','')} {job.get('snippet','')}"
-        # internships are not new-grad full-time roles
-        if re.search(r"\bintern(ship)?s?\b", job.get("title", ""), re.I):
+        # (c) title include/exclude (config-driven; defaults = new-grad SDE)
+        if title_exclude_re.search(job.get("title", "")):
             return
-        # (c) new-grad signal
-        if not NEWGRAD.search(text):
+        if not title_include_re.search(text):
             return
-        # (d) lane keyword match
-        lane = lane_of(text, lanes_by_priority)
+        # (d) lane keyword match (keywords live on each lane in config.yaml)
+        lane = lane_of(text, lanes_cfg)
         if not lane:
             return
         # (e) recency is applied AFTER fetching via the auto-scaling window

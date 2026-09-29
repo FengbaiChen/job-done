@@ -1,6 +1,6 @@
 # Job Pipeline — Onboarding
 
-Shareable setup script. Run it as a conversation with a new user — step by step, confirming as you go. Do not dump all questions at once.
+Shareable setup script. Run it as a conversation with a new user — step by step, confirming as you go. Do not dump all questions at once. The pipeline itself is domain-agnostic (it works for any job hunt); the examples below use a software-engineering hunt for concreteness.
 
 ## Step 1 — Resumes
 
@@ -10,7 +10,7 @@ Ask the user to upload 1–3 resumes. Read each one and extract:
 - education (school, degree, field, dates, GPA)
 - work authorization + sponsorship needs (ask if unclear)
 - links (LinkedIn, GitHub, personal site)
-- skills and standout projects → propose 1 lane per resume (e.g. agent/infra, ai/cloud, genai) with 2–3 example search queries each
+- skills and standout projects
 
 Store the files (note their paths). Copy `templates/profile.template.yaml` → `profile.yaml` and fill it in, then copy `templates/standing-answers.template.md` → `references/standing-answers.md` and adjust the rules to the user's situation.
 
@@ -28,7 +28,38 @@ Present the extracted profile back. Ask for anything missing:
 
 The user confirms or corrects everything before moving on.
 
-## Step 3 — Connect Gmail (required, not optional)
+## Step 3 — Target roles
+
+Discuss what the user is hunting for and turn it into pipeline configuration. Do not ask them to list target companies — that comes from recommendation in Step 4.
+
+1. **Lanes.** Propose 1 lane per resume (e.g. for a SWE: backend/infra, AI platform, frontend). Each lane gets: a name, its resume, a priority, 8–15 **keywords** (plain phrases matched against title + snippet to assign the lane), and 2–3 LinkedIn **search queries**.
+2. **Title filters.** Agree on `title_include` (must match at least one — e.g. a new grad's `new grad | entry level | junior`; an experienced hire's `senior | staff`) and `title_exclude` (any match drops the posting — e.g. `intern` for full-time hunts).
+3. **Industry / function tags.** Note 1–3 industry tags and function tags describing the hunt (e.g. industries `ai_infra`, `fintech`; functions `swe`, `sre`). These drive the brand recommendation in Step 4. The tag vocabulary lives in `references/board_directory.json` — reuse its tags when they fit.
+
+## Step 4 — Brand set (recommended, not interrogated)
+
+Users rarely have a target-company list ready, so **recommend one** instead of asking. The pipeline polls company ATS boards directly (public Greenhouse/Ashby JSON APIs — complete, structured, no login), which beats keyword search on recall for the companies it covers.
+
+1. Copy `templates/company_boards.template.json` → `references/company_boards.json` (starter set of ~10 generic companies with stable public APIs — the user has coverage from minute one).
+2. From `references/board_directory.json` (49+ companies with verified public ATS APIs, tagged by industry/function), pick 15–25 whose tags overlap the Step 3 tags.
+3. Propose the list to the user with a one-line rationale each ("AI infra, hires new-grad SWEs via Ashby"). They confirm, cut, or add names.
+4. **Verify live** before saving: hit each confirmed company's board API (`https://boards-api.greenhouse.io/v1/boards/{token}/jobs` or `https://api.ashbyhq.com/posting-api/job-board/{token}`); drop any token that fails and tell the user.
+5. Merge the verified picks into `references/company_boards.json` (dedupe by token).
+
+`references/company_boards.json` is the user's own list — gitignored, never committed. The directory is the shared pool; runtime source-health monitoring warns if a board goes quiet (company switched ATS, token died).
+
+## Step 5 — Curated job lists (recommended)
+
+API polling covers companies with public ATS boards; LinkedIn covers the rest best-effort. Community-curated lists (GitHub repos updated daily with postings) fill the remaining gap — they aggregate companies with no public API at all. During this step:
+
+1. Based on the resumes (Step 1) and target roles (Step 3), search GitHub for daily-updated job repos (e.g. "new grad positions 2026").
+2. Open the top candidates and check: updated recently, has a parseable table (Company | Role | Location | Application | Age — HTML `<table>` or markdown both work), covers the user's field.
+3. Propose 1–3 to the user with a one-line description each; the user confirms.
+4. Note the confirmed URLs + sections to include (e.g. "Software Engineering", "Data Science") — they are written under `curated_sources:` in Step 9.
+
+The pipeline fetches these tables every run and treats rows like any other source: dedupe, recency window, health monitoring. If a list's format drifts (0 parseable rows), the health check warns.
+
+## Step 6 — Connect Gmail (required, not optional)
 
 The pipeline needs mailbox access for two things — this step cannot be skipped:
 
@@ -45,47 +76,18 @@ Follow the gmail skill's standard connect flow (`/opt/hatch/skills/gmail/SKILL.m
 
 Set expectations in one or two sentences, in the user's own words: verification codes are fetched **on demand only**. The pipeline reads Gmail only when a form-fill task parks at a verification step and reports back the site URL and the masked recipient shown on the page; then it does one targeted lookup for that single freshly-arrived message, uses the code once for that step, and never stores it, never reuses it, and never sweeps the inbox for codes.
 
-## Step 4 — LinkedIn login (recommended if LinkedIn is a discovery source)
+## Step 7 — LinkedIn login (recommended if LinkedIn is a discovery source)
 
-Roles discovered from LinkedIn need one click on "Apply" — and LinkedIn gates
-that behind sign-in. The pipeline handles this with a **user-takeover login**
-(the assistant never sees the password):
+Roles discovered from LinkedIn need one click on "Apply" — and LinkedIn gates that behind sign-in. The pipeline handles this with a **user-takeover login** (the assistant never sees the password):
 
-1. Spawn a browser task that opens https://www.linkedin.com/login and parks,
-   asking the user to take over.
-2. The user opens the task's browser panel, takes over, and signs in with
-   their own credentials (including any 2FA / verification challenge), then
-   ends the takeover and confirms.
-3. Verify the login (linkedin.com/feed shows a logged-in homepage, not a
-   login wall), then close the task. The session persists in the shared
-   browser profile, so all later fill tasks reuse it.
+1. Spawn a browser task that opens https://www.linkedin.com/login and parks, asking the user to take over.
+2. The user opens the task's browser panel, takes over, and signs in with their own credentials (including any 2FA / verification challenge), then ends the takeover and confirms.
+3. Verify the login (linkedin.com/feed shows a logged-in homepage, not a login wall), then close the task. The session persists in the shared browser profile, so all later fill tasks reuse it.
 4. If a fill task ever reports "linkedin session expired", repeat this step.
 
-All browser tasks share one Chromium profile — the LinkedIn session is shared
-across tasks. Be upfront: LinkedIn's ToS technically prohibits automated
-access, so there is a small account-risk tradeoff; let the user decide.
+All browser tasks share one Chromium profile — the LinkedIn session is shared across tasks. Be upfront: LinkedIn's ToS technically prohibits automated access, so there is a small account-risk tradeoff; let the user decide.
 
-## Step 5 — Curated job lists (recommended)
-
-API polling covers companies with public ATS boards; LinkedIn covers the rest
-best-effort. Community-curated lists (GitHub repos updated daily with new-grad
-postings) fill the remaining gap — they aggregate companies with no public API
-at all. During this step:
-
-1. Based on the resumes (Step 1) and target roles (Step 2), search GitHub for
-   daily-updated new-grad job repos (e.g. "new grad positions 2026").
-2. Open the top candidates and check: updated recently, has a parseable table
-   (Company | Role | Location | Application | Age — HTML `<table>` or markdown
-   both work), covers the user's field.
-3. Propose 1–3 to the user with a one-line description each; the user confirms.
-4. Save confirmed URLs under `curated_sources:` in `config.yaml`, with the
-   sections to include (e.g. "Software Engineering", "Data Science").
-
-The pipeline fetches these tables every run and treats rows like any other
-source: dedupe, recency window, health monitoring. If a list's format drifts
-(0 parseable rows), the health check warns.
-
-## Step 6 — Storage
+## Step 8 — Storage
 
 Recommend: **Google Sheet** (human-facing tracker — shareable, phone-friendly) + **local `state/seen_roles.json`** (machine dedupe cache so browsed roles are never re-read). Alternative: local-only if they decline Google.
 
@@ -93,28 +95,27 @@ If Sheet: connect Google Sheets, create the tracker with columns:
 `Date | Company | Role | Location | Lane | Link | Confirmation | App ID | Status | Notes`
 Save the spreadsheet ID in `state/tracker.json`.
 
-## Step 7 — Config
+## Step 9 — Config
 
-Copy `templates/config.template.yaml` → `config.yaml` and fill it in with the user
-(the template's comments explain every field):
+Copy `templates/config.template.yaml` → `config.yaml` and fill it in from everything agreed above (the template's comments explain every field):
 
-- which lane each resume targets (+ search queries)
+- lanes (name, resume, priority, **keywords**, queries) from Step 3
+- `discovery.title_include` / `title_exclude` from Step 3
+- `curated_sources` from Step 5
 - run frequency and times, timezone
 - roles per run (`shortlist_size`), browse target (`browse_target`)
 - locations: preferred, acceptable, excluded
 - companies to never apply to (`blacklist` — keep small; already-applied roles are deduped via `state/seen_roles.json`, not here)
 - submit review mode: `batch` (fill all → one combined review → "submit all") or `per_application` (fill → review → approve → submit, one role at a time)
-- posting recency: how fresh must a role be? (`max_post_age_days` — 7 = past week, 3, 1 = past 24h, 0.5 = past 12h; best-effort per source)
+- posting recency: the auto-scaling window (`window_steps_days`, `min_candidates`) is the primary control; `max_post_age_days` is a legacy fallback
 - auto-select: skip the role-picking step and go straight to filling? (`auto_select` — for lazy users; submit approval is never skipped)
 - grad-date eligibility rules per lane if relevant
 
-## Step 8 — Go live
+## Step 10 — Go live
 
 Create the discovery cron(s) per the schedule (owner: the user's job-search goal or tracked item).
 
-Reporting destination: ask whether discovery reports should go to a dedicated
-side chat (recommended — keeps the main chat clean) or stay in the current
-chat. If side chat: create it and set it as the crons' `delivery` target.
+Reporting destination: ask whether discovery reports should go to a dedicated side chat (recommended — keeps the main chat clean) or stay in the current chat. If side chat: create it and set it as the crons' `delivery` target.
 
 Confirm with the user:
 

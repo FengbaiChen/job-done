@@ -3,6 +3,9 @@
 profile.yaml
 config.yaml
 references/standing-answers.md
+# The user's own confirmed board list (built during onboarding from the
+# recommendation pool + starter template) — personal, like config.yaml.
+references/company_boards.json
 state/*
 !state/.gitkeep
 # Resumes and transcripts must never be pushed, even if someone drops them

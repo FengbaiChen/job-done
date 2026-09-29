@@ -1,0 +1,602 @@
+{
+ "_comment": "Recommendation pool for onboarding (ONBOARDING.md Step 5): companies with verified-public ATS board APIs, tagged by industry/function so the agent can recommend a brand set from the user's resume + target roles instead of asking the user to list companies. Entries are re-verified live during onboarding before being written to the user's references/company_boards.json (gitignored). Community contributions welcome: keep tags accurate, set last_verified when you test. Greenhouse: https://boards-api.greenhouse.io/v1/boards/{token}/jobs | Ashby: https://api.ashbyhq.com/posting-api/job-board/{token}",
+ "boards": [
+  {
+   "company": "Together AI",
+   "platform": "greenhouse",
+   "token": "togetherai",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Decagon",
+   "platform": "ashby",
+   "token": "decagon",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Cerebras",
+   "platform": "ashby",
+   "token": "cerebras",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Fireworks AI",
+   "platform": "ashby",
+   "token": "fireworks",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Sierra",
+   "platform": "ashby",
+   "token": "sierra",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Replit",
+   "platform": "ashby",
+   "token": "replit",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Anysphere",
+   "platform": "ashby",
+   "token": "cursor",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Anthropic",
+   "platform": "greenhouse",
+   "token": "anthropic",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "OpenAI",
+   "platform": "ashby",
+   "token": "openai",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Anyscale",
+   "platform": "ashby",
+   "token": "anyscale",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Baseten",
+   "platform": "ashby",
+   "token": "baseten",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Modal",
+   "platform": "ashby",
+   "token": "modal",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "CoreWeave",
+   "platform": "greenhouse",
+   "token": "coreweave",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Crusoe",
+   "platform": "ashby",
+   "token": "crusoe",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Etched",
+   "platform": "ashby",
+   "token": "etched",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Lightmatter",
+   "platform": "greenhouse",
+   "token": "lightmatter",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Perplexity",
+   "platform": "ashby",
+   "token": "perplexity",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Cohere",
+   "platform": "ashby",
+   "token": "cohere",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "LangChain",
+   "platform": "ashby",
+   "token": "langchain",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "ElevenLabs",
+   "platform": "ashby",
+   "token": "elevenlabs",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Deepgram",
+   "platform": "ashby",
+   "token": "deepgram",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "AssemblyAI",
+   "platform": "greenhouse",
+   "token": "assemblyai",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Cartesia",
+   "platform": "ashby",
+   "token": "cartesia",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Firecrawl",
+   "platform": "ashby",
+   "token": "firecrawl",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Browserbase",
+   "platform": "ashby",
+   "token": "browserbase",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Tavily",
+   "platform": "ashby",
+   "token": "tavily",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Exa",
+   "platform": "ashby",
+   "token": "exa",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Vapi",
+   "platform": "ashby",
+   "token": "vapi",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Bland",
+   "platform": "ashby",
+   "token": "bland",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Scale AI",
+   "platform": "greenhouse",
+   "token": "scaleai",
+   "industries": [
+    "ai_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Cloudflare",
+   "platform": "greenhouse",
+   "token": "cloudflare",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Databricks",
+   "platform": "greenhouse",
+   "token": "databricks",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Datadog",
+   "platform": "greenhouse",
+   "token": "datadog",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Elastic",
+   "platform": "greenhouse",
+   "token": "elastic",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "MongoDB",
+   "platform": "greenhouse",
+   "token": "mongodb",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Vercel",
+   "platform": "greenhouse",
+   "token": "vercel",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Netlify",
+   "platform": "greenhouse",
+   "token": "netlify",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Railway",
+   "platform": "ashby",
+   "token": "railway",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Figma",
+   "platform": "greenhouse",
+   "token": "figma",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Linear",
+   "platform": "ashby",
+   "token": "linear",
+   "industries": [
+    "cloud_infra"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Airbnb",
+   "platform": "greenhouse",
+   "token": "airbnb",
+   "industries": [
+    "consumer",
+    "travel"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Coinbase",
+   "platform": "greenhouse",
+   "token": "coinbase",
+   "industries": [
+    "fintech",
+    "crypto"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Datadog",
+   "platform": "greenhouse",
+   "token": "datadog",
+   "industries": [
+    "devtools",
+    "observability"
+   ],
+   "functions": [
+    "swe",
+    "sre"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Duolingo",
+   "platform": "greenhouse",
+   "token": "duolingo",
+   "industries": [
+    "consumer",
+    "edtech"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Reddit",
+   "platform": "greenhouse",
+   "token": "reddit",
+   "industries": [
+    "consumer",
+    "social"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Discord",
+   "platform": "greenhouse",
+   "token": "discord",
+   "industries": [
+    "consumer",
+    "social"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Robinhood",
+   "platform": "greenhouse",
+   "token": "robinhood",
+   "industries": [
+    "fintech"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Dropbox",
+   "platform": "greenhouse",
+   "token": "dropbox",
+   "industries": [
+    "devtools",
+    "storage"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  },
+  {
+   "company": "Figma",
+   "platform": "greenhouse",
+   "token": "figma",
+   "industries": [
+    "devtools",
+    "design"
+   ],
+   "functions": [
+    "swe"
+   ],
+   "last_verified": "2026-09-29"
+  }
+ ]
+}

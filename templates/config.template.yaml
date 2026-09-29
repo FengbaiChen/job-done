@@ -11,25 +11,73 @@ discovery:
   shortlist_size: 20     # roles surfaced to the user per run (fill stage filters further)
   min_candidates: 20     # auto-scaling window expands until this many pre-filter roles
   window_steps_days: [1, 3, 7, 14, 30]  # start 24h, expand stepwise while too few
+  # Title filters: which postings are even eligible. Regex fragments,
+  # case-insensitive. A posting must match at least one title_include and
+  # none of title_exclude (exclude is checked against the title only).
+  # Examples below suit a new-grad hunt; an experienced hire might use
+  # include: ['senior', 'staff', 'lead'] and exclude: ['intern'].
+  title_include:
+    - 'new[\s\-]?grad'
+    - 'entry[\s\-]?level'
+    - 'university grad'
+    - 'early career'
+    - '\bjunior\b'
+    - '\b2026\b'
+    - '\b2027\b'
+    - 'recent grad'
+  title_exclude:
+    - '\bintern(ship)?s?\b'
 
 # One entry per resume. The agent matches each role to the best-fit lane
 # and uploads that lane's resume automatically.
+# Example below: three lanes for a new-grad software engineer. Onboarding
+# Step 3 replaces these with the user's own lanes (one per resume). Each
+# lane needs keywords: plain phrases matched (word-boundary, case-insensitive)
+# against title + snippet to assign the lane.
 lanes:
   - name: agent_infra
     resume: "Your_Name_-_Agent_Infra.pdf"   # filename under your resumes folder
     priority: 1                              # 1 = searched and shortlisted first
+    keywords:
+      - "agent"
+      - "agentic"
+      - "inference"
+      - "serving"
+      - "infra"
+      - "distributed"
+      - "machine learning"
+      - "llm"
+      - "gpu"
+      - "cuda"
     queries:
       - "new grad software engineer agent infrastructure"
       - "new grad AI agent platform engineer"
   - name: ai_cloud
     resume: "Your_Name_-_AI_Cloud.pdf"
     priority: 2
+    keywords:
+      - "backend"
+      - "cloud"
+      - "platform"
+      - "kubernetes"
+      - "k8s"
+      - "microservice"
+      - "devops"
+      - "sre"
+      - "database"
     queries:
       - "new grad backend engineer cloud infrastructure"
       - "new grad software engineer distributed systems"
   - name: genai
     resume: "Your_Name_-_GenAI.pdf"
     priority: 3
+    keywords:
+      - "llm"
+      - "rag"
+      - "chatbot"
+      - "prompt"
+      - "genai"
+      - "ai engineer"
     queries:
       - "new grad software engineer LLM"
 
