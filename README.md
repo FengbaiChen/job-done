@@ -1,4 +1,6 @@
-# Muse Job Pipeline
+# Talos（我不投简历）
+
+*The bronze automaton that applies while you sleep.*
 
 An automated job-application pipeline that runs inside [Muse](https://muse.ai) (Meta's personal AI agent). It discovers job postings matching your profile on a schedule, shortlists the best fits, fills out applications with your standing answers, waits for your approval before anything is submitted, and logs everything to a Google Sheet.
 

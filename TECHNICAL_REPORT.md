@@ -1,4 +1,4 @@
-# Job Pipeline — Technical Report
+# Talos（我不投简历）— Technical Report
 
 **An autonomous, human-in-the-loop job-application pipeline.**
 Repo: https://github.com/xf-mike/muse-job-pipeline · Published 2026-09-29
@@ -7,7 +7,7 @@ Repo: https://github.com/xf-mike/muse-job-pipeline · Published 2026-09-29
 
 ## Abstract
 
-Job Pipeline is an end-to-end automation loop that discovers job postings matching your profile, shortlists them, fills out applications, and tracks recruiter correspondence — while keeping the human in control of every submission. It is distributed as a portable **skill** (a `SKILL.md` playbook plus scripts, templates, and onboarding docs) but what actually runs is a **pipeline**: scheduled agents, incremental state, a tracker spreadsheet, and a dedicated chat channel, operating four times a day without being asked.
+Talos is an end-to-end automation loop that discovers job postings matching your profile, shortlists them, fills out applications, and tracks recruiter correspondence — while keeping the human in control of every submission. It is distributed as a portable **skill** (a `SKILL.md` playbook plus scripts, templates, and onboarding docs) but what actually runs is a **pipeline**: scheduled agents, incremental state, a tracker spreadsheet, and a dedicated chat channel, operating four times a day without being asked.
 
 The pipeline is domain-agnostic: lanes, title filters, target companies, and locations are all configuration. It was built and battle-tested on a **new-grad software-engineering hunt** (the deployment that produced the numbers cited in this report), which serves as the worked example throughout.
 
@@ -19,7 +19,7 @@ The system's central design bet is **token economics**: every stage is engineere
 
 ### 1.1 What it is — and what it is not
 
-Job Pipeline automates the *legwork* of a job hunt (finding roles, filling forms, watching for replies) but never the *decisions*. Concretely:
+Talos automates the *legwork* of a job hunt (finding roles, filling forms, watching for replies) but never the *decisions*. Concretely:
 
 - It **does** discover roles on a schedule, dedupe them, shortlist the best fits, pre-fill entire applications, and monitor your inbox for recruiter replies.
 - It **does not** click a final Submit without your explicit approval — every application parks at the review screen until you say "submit" / "submit all".

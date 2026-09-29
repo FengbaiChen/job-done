@@ -1,4 +1,4 @@
-# Job Pipeline — Onboarding
+# Talos（我不投简历）— Onboarding
 
 Shareable setup script. Run it as a conversation with a new user — step by step, confirming as you go. Do not dump all questions at once. The pipeline itself is domain-agnostic (it works for any job hunt); the examples below use a software-engineering hunt for concreteness.
 
