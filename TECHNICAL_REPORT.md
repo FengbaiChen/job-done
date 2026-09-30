@@ -7,11 +7,11 @@ Repo: https://github.com/xf-mike/muse-job-pipeline · Published 2026-09-29
 
 ## Abstract
 
-Talos is an end-to-end automation loop that discovers job postings matching your profile, shortlists them, fills out applications, and tracks recruiter correspondence — while keeping the human in control of every submission. It is distributed as a portable **skill** (a `SKILL.md` playbook plus scripts, templates, and onboarding docs) but what actually runs is a **pipeline**: scheduled agents, incremental state, a tracker spreadsheet, and a dedicated chat channel, operating four times a day without being asked.
+Talos is an end-to-end automation loop that discovers job postings matching your profile, shortlists them, fills out applications, **submits them**, and tracks recruiter correspondence — **fully automatically by default**. The human is not the bottleneck: a standing submit authorization is confirmed once at onboarding (risks stated plainly), and a review gate remains available as an opt-out. It is distributed as a portable **skill** (a `SKILL.md` playbook plus scripts, templates, and onboarding docs) but what actually runs is a **pipeline**: scheduled agents, incremental state, a tracker spreadsheet, and a dedicated chat channel, operating four times a day without being asked.
 
 The pipeline is domain-agnostic: lanes, title filters, target companies, and locations are all configuration. It was built and battle-tested on a **new-grad software-engineering hunt** (the deployment that produced the numbers cited in this report), which serves as the worked example throughout.
 
-The system's central design bet is **token economics**: every stage is engineered to minimize LLM calls — API-first discovery, programmatic pre-filtering, batched judging, cached form structures, and an answer bank for free-text questions. The LLM is spent only where judgment is genuinely required.
+The system's central design bet is **token economics**: every stage is engineered to minimize LLM calls — API-first discovery, programmatic pre-filtering, batched judging, cached form structures, and an answer bank for free-text questions. The LLM is spent only where judgment is genuinely required. A full discovery sweep over ~7,000 postings costs on the order of a thousand tokens — against alternatives that render every posting in a browser and score each with its own LLM call, the difference is measured in orders of magnitude, not percent.
 
 ---
 
@@ -22,7 +22,7 @@ The system's central design bet is **token economics**: every stage is engineere
 Talos automates the *legwork* of a job hunt (finding roles, filling forms, watching for replies) but never the *decisions*. Concretely:
 
 - It **does** discover roles on a schedule, dedupe them, shortlist the best fits, pre-fill entire applications, and monitor your inbox for recruiter replies.
-- It **does not** click a final Submit without your explicit approval — every application parks at the review screen until you say "submit" / "submit all".
+- It **does not** click a final Submit without your authorization — by default that's the standing `auto_submit` you confirmed at onboarding (risks explained); turn it off and every application parks at the review screen until you say "submit" / "submit all".
 - It **does not** invent facts. Citizenship, dates, test scores, and demographics come from your profile or are left blank; unknown required fields are escalated, not guessed.
 
 ### 1.2 Installation & onboarding
@@ -114,13 +114,15 @@ Community-maintained job lists (e.g. GitHub repos publishing daily new-grad post
 
 Every pulled listing passes through `consider()` in `discover.py`, in this order:
 
-1. **Dedupe first** — URL seen in `state/seen_roles.json` (or earlier in this run) → dropped. Nothing is ever re-read.
+1. **Dedupe first** — URL seen in `state/seen_roles.json` (or earlier in this run) → dropped. **Semantic dedupe** goes further: requisition IDs extracted from URLs (`gh_jid`, `jobId`, `JR-…`) and normalized (company, title) pairs catch the same posting under a different URL and roles the user already applied to outside the pipeline. Nothing is ever re-read.
 2. **Blacklist** — user-declared never-apply companies.
-3. **Title exclude** — `discovery.title_exclude` regexes against the title (default: internship postings). Any match drops the listing.
-4. **Title include** — `discovery.title_include` regexes over title + snippet. Listings matching none are dropped *before* any LLM sees them. (In the reference new-grad deployment this is the new-grad signal: "new grad", "entry level", class-year markers, etc.)
-5. **Lane keyword match** — each lane's `keywords` (config) matched against title + snippet; assigned to the highest-priority matching lane; unmatched listings are dropped.
-6. **Recency, hour-precision, lenient** — the auto-scaling window (`discovery.window_steps_days`, default starting 24h and expanding while fewer than `discovery.min_candidates` roles are in-window) compared against the posting's age in hours. LinkedIn relative times are exact; day-granularity board dates assume end-of-day (minimum possible age — a posting dated yesterday still passes in the morning run); unknown dates are always kept. Never drop on missing data. (`--max-age-days` overrides to a fixed window for one-time backfills.)
-7. **Location scoring** — remote / California / hybrid preferred; `relocation=yes` keeps other US locations eligible but deprioritized; zero-score locations are dropped.
+3. **Disqualifier prefilter** — obvious hard disqualifiers on title + snippet ("no sponsorship", "not eligible for F1", "record a video") drop the listing before judging; the judge scans full posting text for the rest.
+4. **Manual-likely flagging** — URLs matching known human-verification flows (`ycombinator.com`, `icims`) are tagged `manual_likely` so the shortlist warns instead of burning a fill attempt.
+5. **Title exclude** — `discovery.title_exclude` regexes against the title (default: internship postings). Any match drops the listing.
+6. **Title include** — `discovery.title_include` regexes over title + snippet. Listings matching none are dropped *before* any LLM sees them. (In the reference new-grad deployment this is the new-grad signal: "new grad", "entry level", class-year markers, etc.)
+7. **Lane keyword match** — each lane's `keywords` (config) matched against title + snippet; assigned to the highest-priority matching lane; unmatched listings are dropped.
+8. **Recency, hour-precision, lenient** — the auto-scaling window (`discovery.window_steps_days`, default starting 24h and expanding while fewer than `discovery.min_candidates` roles are in-window) compared against the posting's age in hours. LinkedIn relative times are exact; day-granularity board dates assume end-of-day (minimum possible age — a posting dated yesterday still passes in the morning run); unknown dates are always kept. Never drop on missing data. (`--max-age-days` overrides to a fixed window for one-time backfills.)
+9. **Location scoring** — remote / California / hybrid preferred; `relocation=yes` keeps other US locations eligible but deprioritized; zero-score locations are dropped.
 
 Survivors (typically ~10–15 of ~7,000) are written to `state/discovery_candidates.json` — a ~1.2k-token file. Only then does the LLM get involved.
 
@@ -129,6 +131,17 @@ Survivors (typically ~10–15 of ~7,000) are written to `state/discovery_candida
 The agent scores candidates in **batches of ~10 per LLM call** from title + company + location + date + snippet — never one call per role. Clear cases are decided from the snippet alone; genuinely borderline roles may open the posting page, capped at ~5 page opens per run. This is the "cascade": ~7,000 → ~14 programmatic → ~10 judged in 1–2 LLM calls, roughly a **10× reduction** in judging calls versus per-role evaluation.
 
 Every judged role is persisted to `state/seen_roles.json` with `"decision": "shortlisted"` or `"decision": "rejected"` + reason — so future runs never pay to reconsider it.
+
+### 2.4b Token budget (measured, reference deployment)
+
+| Stage | Cost per run |
+|---|---|
+| Discovery (`discover.py`) | **0 LLM calls.** ~7,000 postings pulled via public JSON APIs + LinkedIn guest endpoints; ~1.2k tokens of candidate JSON emitted; ~25–35s wall time. |
+| Judging | **1–2 LLM calls** (10 roles per call, ~10× fewer than per-role scoring). Borderline roles may open ≤5 posting pages. |
+| Filling (per application) | **0 re-parses.** Form structure comes from `form_cache.py`; only genuinely new free-text questions cost one LLM draft, and only once — approved answers are banked (`qa_match.py`, ≥0.75 reuse) forever after. |
+| Tracking | **0 LLM.** `gmail_scan.py` is fully programmatic (ATS-domain allowlist + subject rules), watermarked and incremental. |
+
+The comparison point is the dominant alternative architecture — render every posting in a real browser, score each with its own LLM call, re-parse every form from scratch. Against that, Talos is cheaper by roughly two orders of magnitude per discovered posting, which is what makes 4×-daily scheduled operation economically sane.
 
 ### 2.5 Incremental state: watermark, presence, and silent closes
 
@@ -148,7 +161,12 @@ Every judged role is persisted to `state/seen_roles.json` with `"decision": "sho
 
 ### 2.7 Review & submit gating
 
-`submit_review_mode: batch` (default) fills *all* selected roles, then compiles one combined review — company, role, every field value, every banked/drafted answer — for a single approval ("submit all" or a named subset). `per_application` hands each review over as its role is filled (smaller turns, stoppable early). Either way, the final click happens only on explicit user approval. `auto_select` may skip *selection*; it can never skip *submit approval*.
+Two automation levels, confirmed at onboarding with risks explained:
+
+- **Full-auto (default):** `auto_select: true` sends the whole judged shortlist straight to filling; `auto_submit: true` submits everything once filled, with no review screen. The standing authorization replaces per-run approval. A submit report (confirmations, IDs, blocked/manual list) is always delivered — logging is never skipped.
+- **Human gate:** turn either switch off. `submit_review_mode: batch` (default when gated) fills *all* selected roles, then compiles one combined review — company, role, every field value, every banked/drafted answer — for a single approval ("submit all" or a named subset). `per_application` hands each review over as its role is filled (smaller turns, stoppable early).
+
+The design bet (2026-09-29): a silent failure the user reads about later beats an interruption mid-day. Attempt caps (3 tries per action), the pre-submit checklist, the posting-text disqualifier scan, and semantic dedup are the guardrails that make full-auto responsible instead of reckless.
 
 Submissions are logged with confirmation text, timestamp, and reference ID; the tracker gets one row per application; the URL is marked `"decision": "applied"`.
 
@@ -161,7 +179,7 @@ Submissions are logged with confirmation text, timestamp, and reference ID; the 
 ### 2.9 What the pipeline deliberately does not do
 
 - No credential or session reuse across sites; no CAPTCHA solving as a feature (human-takeover or site-native flows only).
-- No fully-autonomous submission — the human approval gate is architectural, not cosmetic.
+- No silent submission *without authorization*: full-auto mode runs on the standing `auto_submit` the user confirmed at onboarding (risks explained). The approval step can be skipped; the authorization and the logging cannot.
 - No private data in the repo: `profile.yaml`, `config.yaml`, `state/` are gitignored; the public repo carries only the playbook.
 
 ---
@@ -210,7 +228,7 @@ Established ground: [ethos71/forget-the-thunderdome](https://github.com/ethos71/
 2. **LLM-as-fit-judge** — established (ApplyPilot's 1–10 scoring, Resume-Matcher, embedding matchers). The *cascade* (cheap filter → LLM only on survivors) has direct prior art in sliday's funnel.
 3. **Greenhouse `?questions=true` form introspection** — a community-known endpoint, independently confirmed by third-party research; we systematized it into a persistent cache.
 4. **Email-based recruiter-reply tracking and classification** — established (§3.5); multiple projects do exactly this.
-5. **Human-gated submission** — established as a *mode* (ApplyPilot `--dry-run`, linkedin-autoapply-agent's "you click Submit", `pause_before_submit` flags). Our batch-review default is a variant, not an invention.
+5. **Submission gating as a *mode*** — established (ApplyPilot `--dry-run`, linkedin-autoapply-agent's "you click Submit", `pause_before_submit` flags). Our human-gate variant (batch/per_application review) is borrowed; the *default* full-auto mode with onboarding-confirmed standing authorization is our philosophical departure — see §4.2 item 5.
 6. **Answer templates for application questions** — prior art exists both as static config files (`questions.py` templates) and as a learning bank (RAG bot's auto-populating `questions.json`).
 7. **"Skill" packaging** (playbook + onboarding + templates) — an emerging 2026 pattern (Claude skills, career-ops); we are early but not alone.
 8. **Browser-based form filling** — the universal consensus. Direct-POST infeasibility is documented by multiple independent sources; we re-verified it ourselves (reCAPTCHA Enterprise + presigned-S3 uploads) and documented the rejection.
@@ -221,6 +239,7 @@ Established ground: [ethos71/forget-the-thunderdome](https://github.com/ethos71/
 2. **Batched LLM judging (10 jobs per call) as an explicit cost control, combined with incremental watermark + presence tracking** (absent-3-runs → closed) and a URL dedupe cache. Each element has cousins; the packaged combination driving *scheduled bulk discovery* appears new.
 3. **Conservative Q&A answer bank with a deliberate under-match safety policy.** Answer banks exist; the safety framing — prefer one extra LLM call over one wrong auto-answer, with explicit exclusions for temporal/relocation/sponsorship questions — is what we found no prior art for.
 4. **Hour-precision lenient recency.** LinkedIn "X hours ago" converted to exact hours; day-granularity board dates treated as end-of-day (minimum possible age) so evening postings survive the morning run. Minor, but undocumented elsewhere as far as this survey found.
+5. **Full-auto as the default, with the human gate as the opt-out.** Every surveyed tool treats human approval as the safe default and automation as the scary option. We inverted it: silent full-auto is the default posture, the user confirms it once at onboarding with the risks stated plainly, and the engineering goes into making the default *responsible* (attempt caps, pre-submit checklist, disqualifier scan, semantic dedup, always-on logging) rather than into building a prettier gate. The design bet: a failure the user reads about later beats an interruption mid-day.
 
 ### 4.3 Honest limits of these claims
 
