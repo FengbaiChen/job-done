@@ -54,12 +54,23 @@ For each selected role:
    c. No match → draft the answer with the LLM exactly ONCE from the fact sheet
       (`profile.yaml` + `references/standing-answers.md`) and use it directly —
       never ask the user for wording mid-run. Append it to `state/qa_bank.json`
-      (`question`, `answer`, `company`, `role`, `approved_at`, `use_count: 0`)
+      (`question`, `answer`, `company`, `role`, `first_used_at`, `use_count: 0`)
       and quote it verbatim in the final report so the user can correct it
       afterwards. Open-text questions ("why us", motivation, "most interesting
       paper", etc.) may be freely drafted from real background facts; hard
       facts (DOB, SSN, test scores, citizenship) are never invented.
-   Rules: unapproved drafts never enter the bank; sensitive fields (CSRF tokens, tracking IDs, captcha widgets, hidden inputs) are never sent to the LLM and never banked.
+   d. **Risky question → skip the role.** If the question asks for a legal
+      attestation or agreement to terms, a binding commitment (relocation at
+      own expense, a salary number, a start date earlier than `earliest_start`),
+      or any hard fact not in the profile — do NOT draft, do NOT fill, do NOT
+      submit. Mark the role blocked-manual with reason
+      `risky question: <the question>` and list it in the final report. A weak
+      application is recoverable; a misrepresentation or an unwanted legal
+      commitment is not.
+   Rules: drafts are used and banked on first encounter — no pre-approval gate;
+      each is quoted verbatim in the final report for after-the-fact correction.
+      Sensitive fields (CSRF tokens, tracking IDs, captcha widgets, hidden inputs)
+      are never sent to the LLM and never banked.
 3. Fill every field per `references/standing-answers.md`, upload the lane-matched resume + transcript automatically (no permission needed). STOP before Submit.
    **Attempt caps:** max 3 tries per single action (a Submit click, a widget workaround, a dropdown selection). After 3 failures on the same action, stop — the role goes to blocked-manual, the browser task closes, and the URL + exact reason are reported. Never burn 10+ attempts on one control (seen 2026-09-29: C3.ai submit clicked ~15x, Nuro location tried ~10 ways). For widget validation bugs that survive the cap, the role goes to blocked-manual — no takeover requests, no more automation attempts.
 4. **Email verification codes (on demand only):** some sites require an email verification code during registration or before submission. If a browser fill task parks at such a step, it MUST report back and stop: the site URL, the exact step it is stuck at, and the masked recipient shown on the page (e.g. "code sent to x•••@ucsd.edu"). It must NOT guess the code or proceed.
