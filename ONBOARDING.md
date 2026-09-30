@@ -24,6 +24,8 @@ Present the extracted profile back. Ask for anything missing:
 - interview recording consent
 - export-control status if relevant
 - transcript file, if they have one
+- **date of birth (full YYYY-MM-DD; some forms require month/day only) — collect once here, never ask mid-flow**
+- **work history with start/end dates (YYYY-MM) for every role — forms require these and they are never invented**
 - standardized test scores only if a target form is known to require them (note "none" is fine)
 
 The user confirms or corrects everything before moving on.

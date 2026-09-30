@@ -58,6 +58,56 @@ def load_seen():
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
+def job_identity(job):
+    """Semantic identity for dedup: (req_id, company_norm, title_norm).
+
+    Catches what URL-equality misses: the same requisition reposted under a
+    different URL (e.g. two LinkedIn postings for one Workday JR- number),
+    and roles the user already applied to outside the pipeline.
+    """
+    url = job.get("url", "")
+    req_id = ""
+    for pat in (r"gh_jid=(\d+)", r"[?&]jobId=(\d+)", r"(JR-\d+)",
+                r"/jobs/(\d{5,})", r"job/([A-Za-z0-9_-]{20,})"):
+        m = re.search(pat, url)
+        if m:
+            req_id = m.group(1)
+            break
+    comp = re.sub(r"\s+", " ", (job.get("company") or "").strip().lower())
+    title = re.sub(r"\s+", " ", (job.get("title") or "").strip().lower())
+    title = re.sub(r"\s*[\(\[].*?[\)\]]", "", title).strip()
+    return req_id, comp, title
+
+def build_seen_index(seen):
+    """Index seen_roles by req_id and (company, title) for semantic dedup."""
+    by_req, by_pair = {}, {}
+    for url, rec in seen.items():
+        rid, comp, title = job_identity({"url": url, **rec})
+        if rid:
+            by_req[rid] = url
+        if comp and title:
+            by_pair[(comp, title)] = url
+    return by_req, by_pair
+
+# Cheap prefilter on title+snippet. The full posting-text scan happens in the
+# agent's judging step (SKILL.md Stage 2) — this only catches the obvious.
+DISQUALIFIER_PATTERNS = [
+    (re.compile(r"no\s+(visa\s+)?sponsorship", re.I), "no-sponsorship"),
+    (re.compile(r"will not.*sponsor", re.I), "no-sponsorship"),
+    (re.compile(r"not eligible for F1", re.I), "no-sponsorship"),
+    (re.compile(r"record a video", re.I), "video-required"),
+    (re.compile(r"video (self-)?introduction", re.I), "video-required"),
+]
+
+# Domains whose application flow is known to force a human-verification wall.
+# Flagged at discovery so the shortlist can mark them manual-likely instead
+# of burning a fill attempt. (Observed 2026-09-29: YC hCaptcha x3, iCIMS x1.)
+# Substring matched against the whole posting URL (domain or query marker).
+MANUAL_LIKELY_MARKERS = {
+    "ycombinator.com": "hCaptcha expected on YC application modal",
+    "icims": "hCaptcha expected on iCIMS application",
+}
+
 # --------------------------------------------------------------- fetchers ---
 def http_get_json(url):
     req = urllib.request.Request(url, headers=UA)
@@ -550,6 +600,7 @@ def main():
     cfg = load_config()
     boards = load_boards()
     seen = load_seen()
+    seen_by_req, seen_by_pair = build_seen_index(seen)
 
     lanes_cfg = sorted(cfg.get("lanes", []), key=lambda l: l.get("priority", 99))
     lanes_by_priority = [l["name"] for l in lanes_cfg]
@@ -558,7 +609,7 @@ def main():
     title_include_re, title_exclude_re = compile_title_filters(cfg)
 
     stats = {"boards_ok": 0, "boards_failed": 0, "pulled": 0,
-             "deduped": 0, "candidates": 0, "li_ok": 0, "li_failed": 0}
+             "deduped": 0, "disqualified": 0, "candidates": 0, "li_ok": 0, "li_failed": 0}
     failed_boards = []
     seen_urls = set()  # in-run dedupe: same posting can surface via multiple queries
     pulled_urls = []   # every job URL fetched this run (for presence tracking)
@@ -578,12 +629,30 @@ def main():
         if not url:
             return
         pulled_urls.append(url)  # presence: upserted even if filtered/deduped below
-        # (a) dedupe FIRST — never re-read a seen URL
+        # (a) dedupe FIRST — never re-read a seen URL; semantic identity
+        # catches the same requisition under a different URL and roles the
+        # user already applied to outside the pipeline.
         if url in seen or url in seen_urls:
+            stats["deduped"] += 1
+            return
+        rid, comp_norm, title_norm = job_identity({**job, "company": job.get("company") or board_company})
+        if (rid and rid in seen_by_req) or ((comp_norm, title_norm) in seen_by_pair):
             stats["deduped"] += 1
             return
         seen_urls.add(url)
         company = job.get("company") or board_company
+        # (a2) obvious disqualifiers on title+snippet (full posting scan is in
+        # the agent's judging step per SKILL.md Stage 2)
+        text_pre = f"{job.get('title','')} {job.get('snippet','')}"
+        dq = next((name for rx, name in DISQUALIFIER_PATTERNS if rx.search(text_pre)), None)
+        if dq:
+            stats["disqualified"] += 1
+            return
+        # (a3) flag flows known to force human verification — shortlist marks
+        # these manual-likely instead of burning a fill attempt
+        ml = next((reason for marker, reason in MANUAL_LIKELY_MARKERS.items() if marker in url), None)
+        if ml:
+            job["manual_likely"] = ml
         # (b) blacklist
         if any(b in company.lower() for b in blacklist):
             return
@@ -614,6 +683,8 @@ def main():
             "source": job.get("source", ""),
             "_loc": ls, "_date": job.get("date", ""), "_age_h": age_h,
         })
+        if job.get("manual_likely"):
+            pool[-1]["manual_likely"] = job["manual_likely"]
 
     def fetch_board(b):
         # returns (board, jobs, error) — run in worker threads, no shared mutation

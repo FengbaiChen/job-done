@@ -33,6 +33,10 @@ Present the shortlist: company, role, location, lane, link, one-line fit note. T
 
 If `auto_select: true` in config.yaml, skip this step: proceed with all shortlisted roles straight to Stage 3. Submit approval in Stage 4 is never skipped.
 
+**Judging rules (apply during the batch LLM review of candidates):**
+- **Posting-text disqualifier scan:** when judging a candidate, read the posting text for hard disqualifiers and exclude with reason: explicit no-sponsorship language ("will not provide visa sponsorship", "not eligible for F1/J1"), video-recording requirements ("record a video", "video introduction"), citizenship-only requirements. (discover.py pre-filters the obvious ones on title+snippet; the judge catches the rest.)
+- **`manual_likely` flag:** candidates tagged by discover.py (e.g. YC jobs, iCIMS — hCaptcha expected) are presented with a "likely manual" warning. They stay in the shortlist (the user may still want them), but the review notes the expected manual step so it never surprises mid-fill.
+
 **Shortlist exclusion filters** (drop before presenting; no need to ask):
 - Posting explicitly rules out the applicant: "not eligible for F1/J1 students", "will not provide visa sponsorship now or in the future", or equivalent. (Seen 2026-09-29: Atlassian, IBM Agentic AI.)
 - Application requires a video recording / video self-introduction. The user will not record videos — drop these silently. (Seen 2026-09-29: Solace.)
@@ -57,6 +61,7 @@ For each selected role:
       citizenship) are never invented.
    Rules: unapproved drafts never enter the bank; sensitive fields (CSRF tokens, tracking IDs, captcha widgets, hidden inputs) are never sent to the LLM and never banked.
 3. Fill every field per `references/standing-answers.md`, upload the lane-matched resume + transcript automatically (no permission needed). STOP before Submit.
+   **Attempt caps:** max 3 tries per single action (a Submit click, a widget workaround, a dropdown selection). After 3 failures on the same action, stop — the role goes to blocked-manual, the browser task closes, and the URL + exact reason are reported. Never burn 10+ attempts on one control (seen 2026-09-29: C3.ai submit clicked ~15x, Nuro location tried ~10 ways). For widget validation bugs that survive the cap, park the form and offer the user a 30-second takeover instead of more automation attempts.
 4. **Email verification codes (on demand only):** some sites require an email verification code during registration or before submission. If a browser fill task parks at such a step, it MUST report back and stop: the site URL, the exact step it is stuck at, and the masked recipient shown on the page (e.g. "code sent to x•••@ucsd.edu"). It must NOT guess the code or proceed.
    The orchestrating agent then performs ONE targeted Gmail lookup: search for the newest message (last ~15 minutes) from that site's sender address, read ONLY that single matching message, take the code, and hand it to the waiting browser task for that step only.
    Hard rules: one code per step, never reuse a code, never write codes to files / memory / state / logs, never scan the inbox for codes speculatively (no background code sweeps). If no fresh matching message exists, tell the browser task to report back (the user may need to trigger a resend). Filling in the code happens during filling; the final Submit still requires the user's explicit approval — see Stage 5.
@@ -91,6 +96,10 @@ How the review works depends on `submit_review_mode` in config.yaml:
 - **per_application**: the user approves each role's review as it arrives ("submit"), then the agent moves to the next role.
 
 ### Stage 5 — Submit & log (agent)
+
+**Pre-submit checklist** (before clicking Submit):
+- Re-verify prefilled values against `profile.yaml`: city, enrollment/employment status, name spelling — sites prefill these wrong (seen 2026-09-29: Amazon city + enrollment).
+- If the first Submit click returns field errors (e.g. hidden required fields like Ashby's Location), fill them from the profile, retry ONCE, then stop. A second failure means blocked-manual.
 
 Submit each approved application. Capture: confirmation text, timestamp, application/reference ID if shown. Append one row per application to the tracker. Mark each URL `"decision": "applied"` in `state/seen_roles.json`.
 

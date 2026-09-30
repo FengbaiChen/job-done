@@ -7,6 +7,14 @@ surface it to the user — never invent.
 
 - **Education (always manual, never auto-parse):** overwrite every auto-filled
   education field with the entries from `profile.yaml`.
+- **Work experience:** from profile `work_history` — title, company, start/end
+  dates (convert YYYY-MM to the form's format). Location: fill only if known
+  in profile; leave blank otherwise — never invent.
+- **Date of birth:** from profile (`dob`; or `dob_month`/`dob_day` if the year
+  is unknown — never invent the year). Fill month/day or full date as the form
+  requires. Never ask the user mid-flow — it was collected at onboarding.
+- **School name:** always the full official name from profile (e.g. "University
+  of California, San Diego") — never a bare/truncated variant a dropdown suggests.
 - **Earliest start date:** from profile (`earliest_start`).
 - **Work authorization:** authorized to work in the US = value from profile;
   requires sponsorship now or in the future = value from profile.
@@ -21,7 +29,8 @@ surface it to the user — never invent.
   required one blank.
 - **EEO (voluntary):** gender / race / veteran / disability from profile.
 - **"How did you hear about us?":** "Job board" free text, or "Other" if
-  dropdown-only.
+  dropdown-only. If the true source isn't listed, pick the closest job-board
+  option (e.g. Indeed) — never leave a required one blank.
 - **Cover letter:** none, unless the user says otherwise. Leave blank; if a
   form requires one, stop and report.
 - **Free-text "why this company / why this role":** stop and report — the user
