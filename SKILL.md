@@ -1,9 +1,9 @@
 ---
 name: "job-pipeline"
-description: "Talos: run the automated job-application pipeline — discover roles on a schedule, shortlist them for the user, fill applications, batch the reviews, submit on approval, and log everything to the tracker."
+description: "Job Done: run the automated job-application pipeline — discover roles on a schedule, shortlist them for the user, fill applications, batch the reviews, submit on approval, and log everything to the tracker."
 ---
 
-# Talos（我不投简历）
+# Job Done
 
 ## Purpose
 
