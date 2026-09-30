@@ -26,6 +26,9 @@ Present the extracted profile back. Ask for anything missing:
 - transcript file, if they have one
 - **date of birth (full YYYY-MM-DD; some forms require month/day only) — collect once here, never ask mid-flow**
 - **work history with start/end dates (YYYY-MM) for every role — forms require these and they are never invented**
+- **companies/roles already applied to** — ask outright ("any jobs you've already applied to on your own?"). Seed each into the dedupe cache so discovery never re-suggests them:
+  `python3 scripts/seed_applied.py --entry "Company|Title" [--entry "Company|Title|URL"]`
+  (This is the Amazon-ADC lesson: URL-only dedup can't catch "I already applied there.")
 - standardized test scores only if a target form is known to require them (note "none" is fine)
 
 The user confirms or corrects everything before moving on.
