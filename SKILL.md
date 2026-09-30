@@ -33,6 +33,10 @@ Present the shortlist: company, role, location, lane, link, one-line fit note. T
 
 If `auto_select: true` in config.yaml, skip this step: proceed with all shortlisted roles straight to Stage 3. Submit approval in Stage 4 is never skipped.
 
+**Shortlist exclusion filters** (drop before presenting; no need to ask):
+- Posting explicitly rules out the applicant: "not eligible for F1/J1 students", "will not provide visa sponsorship now or in the future", or equivalent. (Seen 2026-09-29: Atlassian, IBM Agentic AI.)
+- Application requires a video recording / video self-introduction. The user will not record videos — drop these silently. (Seen 2026-09-29: Solace.)
+
 ### Stage 3 — Prepare (agent)
 
 For each selected role:
@@ -64,11 +68,13 @@ For each selected role:
    (reset link via the on-demand Gmail lookup, same one-code rules as step 4)
    and store the new password in `Accounts`. If the reset flow hits a CAPTCHA,
    skip per rule 6.
-6. **CAPTCHAs / bot challenges: skip, never solve.** If a fill task hits any
-   CAPTCHA, image challenge, or bot-detection wall, it MUST stop and report
-   `blocked: captcha — <site URL>`. Do not attempt to solve, do not ask the
-   user mid-flow. The role is marked unfillable and reported in the batch
-   review with its URL and reason, for the user to apply manually later.
+6. **Blocked → manual handoff: close the browser, never retry.** If a fill task hits any of the following, it MUST stop immediately, close the browser task, and report `blocked: <pattern> — <site URL> — <exact detail>`. Do NOT retry, do NOT schedule an automatic retry, do NOT ask the user mid-flow. The role is marked unfillable and listed in the batch review with its URL and reason, for the user to apply manually later. Observed patterns (2026-09-29 batch):
+   - CAPTCHA / image challenge / bot-detection wall (hCaptcha, etc.)
+   - Site or backend system errors (e.g. Workday VPS `ErrorPage` errors on save — even repeated)
+   - Rate limits / "busy" on verification codes (e.g. "Too Many Attempts. Try Again Later")
+   - Submit button unresponsive after multiple attempts with no error shown
+   - Form widget validation bugs blocking submission (e.g. location dropdown that won't validate)
+   Missing hard facts (DOB/SSN/test scores/citizenship) are asked of the user once; never invented.
 7. **Fill failures are batch-reported:** every role that cannot be completed
    (CAPTCHA, login wall, missing required info, site error) is recorded with
    its posting URL and the exact reason; all of them are listed together in
@@ -122,6 +128,7 @@ A role may match multiple lanes; assign the highest-priority matching lane and u
 4. Education is always entered manually; never trust a site's resume auto-parse.
 5. `profile.yaml` and `state/` are personal — never include them when sharing the skill.
 6. Dedupe is sacred: check `state/seen_roles.json` before reading any role URL.
+7. Blocked means manual: CAPTCHA, site/backend errors, rate limits, unresponsive submit, widget bugs → close the browser immediately, no retries (not even scheduled ones), record URL + exact reason, report for the user to apply manually.
 
 ## Sharing
 
