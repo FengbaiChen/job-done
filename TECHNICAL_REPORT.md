@@ -1,7 +1,7 @@
 # Job Done— Technical Report
 
 **An autonomous, human-in-the-loop job-application pipeline.**
-Repo: https://github.com/xf-mike/muse-job-pipeline · Published 2026-09-29
+Repo: https://github.com/xf-mike/job-done · Published 2026-09-29
 
 ---
 

@@ -6,7 +6,7 @@
 
 ## Install
 
-Send this repo's URL (https://github.com/xf-mike/muse-job-pipeline) to your Muse and say **"install Job Done"**. It clones everything into place and walks you through onboarding (~10 minutes, conversational). No terminal, no config files by hand.
+Send this repo's URL (https://github.com/xf-mike/job-done) to your Muse and say **"install Job Done"**. It clones everything into place and walks you through onboarding (~10 minutes, conversational). No terminal, no config files by hand.
 
 You'll provide: 1–3 resumes, your profile info (including any companies you've already applied to — so it doesn't re-apply), search lanes, locations, and schedule. The agent creates your tracker sheet, activates the discovery schedule, and you're live.
 

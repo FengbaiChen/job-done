@@ -144,7 +144,7 @@ A role may match multiple lanes; assign the highest-priority matching lane and u
 
 ## Sharing
 
-Public repo: https://github.com/xf-mike/muse-job-pipeline
+Public repo: https://github.com/xf-mike/job-done
 
 To give this to a friend, just send them the link. Their agent clones it into `~/workspace/skills/job-pipeline/` and follows `ONBOARDING.md` with them in conversation. The repo holds only the shareable playbook + templates — `profile.yaml`, `config.yaml`, and `state/` are gitignored, so personal data can never leak into it.
 
