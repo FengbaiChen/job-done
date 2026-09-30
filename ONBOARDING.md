@@ -110,8 +110,36 @@ Copy `templates/config.template.yaml` → `config.yaml` and fill it in from ever
 - companies to never apply to (`blacklist` — keep small; already-applied roles are deduped via `state/seen_roles.json`, not here)
 - submit review mode: `batch` (fill all → one combined review → "submit all") or `per_application` (fill → review → approve → submit, one role at a time)
 - posting recency: the auto-scaling window (`window_steps_days`, `min_candidates`) is the primary control; `max_post_age_days` is a legacy fallback
-- auto-select: skip the role-picking step and go straight to filling? (`auto_select` — for lazy users; submit approval is never skipped)
+- auto-select: skip the role-picking step and go straight to filling? (`auto_select` — default true; confirm at onboarding with risks explained)
+- auto-submit: submit all filled applications with no review screen? (`auto_submit` — default true; confirm at onboarding with risks explained; when false, `submit_review_mode` applies)
 - grad-date eligibility rules per lane if relevant
+
+### Automation level (confirm both explicitly — explain the risks first)
+
+The pipeline can run end-to-end with zero interruptions. Present both switches
+with their risks in plain language and get an explicit yes/no for each. The
+template defaults are the aggressive ones (`true`/`true`); the user may turn
+either off.
+
+- **A. Auto-fill the shortlist** (`auto_select`, default true): every role that
+  passes judging goes straight to form-filling — no picking from a list.
+  Risk: a misjudged role gets filled (wasted effort, but nothing is submitted
+  yet — the blast radius is small).
+- **B. Auto-submit after filling** (`auto_submit`, default true): once all
+  forms are filled, they are submitted immediately with no review screen.
+  Risks, stated plainly:
+  1. A prefill error or wrong field goes out uncaught — a submitted
+     application can't be taken back. (Mitigated by the pre-submit checklist
+     and standing answers, not eliminated.)
+  2. A misjudged role gets applied to without the user ever seeing it.
+     (Mitigated by the posting-text disqualifier scan and semantic dedup.)
+  3. Duplicate applications if dedup misses — dangerous where a company caps
+     applications (e.g. ByteDance's 2-role limit for new grads).
+  A post-submit report (confirmations, IDs, blocked/manual list) is always
+  delivered either way — only the approval step is skipped, never the logging.
+
+Record the answers in `config.yaml`. If the user turns B off, also confirm
+`submit_review_mode` (batch vs per_application).
 
 ## Step 10 — Go live
 

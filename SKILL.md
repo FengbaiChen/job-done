@@ -31,7 +31,7 @@ To cover a new company, add its board to `references/company_boards.json` (`gree
 
 Present the shortlist: company, role, location, lane, link, one-line fit note. The user picks ("all", numbers, or names).
 
-If `auto_select: true` in config.yaml, skip this step: proceed with all shortlisted roles straight to Stage 3. Submit approval in Stage 4 is never skipped.
+If `auto_select: true` in config.yaml, skip this step: proceed with all shortlisted roles straight to Stage 3. Stage 4 review is skipped only when `auto_submit: true` (standing authorization confirmed at onboarding).
 
 **Judging rules (apply during the batch LLM review of candidates):**
 - **Posting-text disqualifier scan:** when judging a candidate, read the posting text for hard disqualifiers and exclude with reason: explicit no-sponsorship language ("will not provide visa sponsorship", "not eligible for F1/J1"), video-recording requirements ("record a video", "video introduction"), citizenship-only requirements. (discover.py pre-filters the obvious ones on title+snippet; the judge catches the rest.)
@@ -90,10 +90,13 @@ How the review works depends on `submit_review_mode` in config.yaml:
 - **batch** (default): fill ALL selected roles first, then compile everything into one combined review.
 - **per_application**: fill ONE role and hand its review to the user immediately (smaller turns; the user can stop early).
 
-### Stage 4 — Approve (user)
+### Stage 4 — Approve (user, unless auto_submit)
 
+- **auto_submit: true** (default): skip this stage entirely. After all roles are filled in Stage 3, proceed straight to Stage 5. The standing authorization was confirmed at onboarding with risks explained — it counts as the user's submit approval.
 - **batch**: the user reviews the combined batch, edits anything, and says "submit all" (or names a subset).
 - **per_application**: the user approves each role's review as it arrives ("submit"), then the agent moves to the next role.
+
+`submit_review_mode` (batch / per_application) only applies when `auto_submit: false`.
 
 ### Stage 5 — Submit & log (agent)
 
@@ -131,7 +134,7 @@ A role may match multiple lanes; assign the highest-priority matching lane and u
 
 ## Operating Rules
 
-1. Never click Submit without the user's explicit "submit" / "submit all".
+1. Never click Submit without the user's submit authorization — which is either an explicit per-run "submit" / "submit all", or the standing `auto_submit: true` confirmed at onboarding with risks explained.
 2. Resume and transcript uploads are routine — never ask permission.
 3. Never invent: citizenship, DOB, SSN, test scores, demographic facts. For a required field with no true answer, use "N/A" only with explicit user approval.
 4. Education is always entered manually; never trust a site's resume auto-parse.

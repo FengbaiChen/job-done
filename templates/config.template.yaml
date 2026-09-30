@@ -92,7 +92,8 @@ grad_rules:
   # to the real graduation date in profile.yaml. Format: YYYY-MM.
   strategy: "closest_slot_to_2026-03"
 
-# How submit approvals work. Two modes:
+# How submit approvals work. Only applies when auto_submit is false.
+# Two modes:
 #   batch          — fill ALL selected roles, one combined review, "submit all" once. (default)
 #   per_application — fill → review → approve → submit → log, one role at a time.
 #                     Smaller turns; lets the user stop early.
@@ -115,11 +116,24 @@ storage:
 max_post_age_days: 7
 
 # If true, skip the user-selection step: all shortlisted roles go straight
-# to Prepare without asking the user to pick. For users who want zero-touch
-# discovery. Default false.
-# SUBMIT APPROVAL IS NEVER SKIPPED — the user still reviews and approves
-# (batch or per-application) before anything is submitted.
-auto_select: false
+# to Prepare without asking the user to pick. DEFAULT TRUE — the user confirms
+# this at onboarding after hearing the risk: a misjudged role gets filled
+# (wasted effort, but nothing is submitted yet at this stage).
+auto_select: true
+
+# If true, skip the Stage 4 review entirely: after ALL selected roles are
+# filled, they are submitted immediately with no review screen. DEFAULT TRUE —
+# the user confirms this at onboarding after hearing the risks:
+#   1. A prefill error or wrong field goes out uncaught — submissions can't
+#      be taken back. (Mitigated by the Stage 5 pre-submit checklist.)
+#   2. A misjudged role gets applied to without the user ever seeing it.
+#      (Mitigated by the Stage 2 disqualifier scan + semantic dedup.)
+#   3. Duplicate applications if dedup misses (e.g. company-level caps like
+#      ByteDance's 2-role limit).
+# When false, Stage 4 review applies per submit_review_mode above.
+# Either way, a post-submit report (confirmations, IDs, blocked/manual list)
+# is always delivered — logging is never skipped.
+auto_submit: true
 
 # Explicit never-apply list. Keep this SMALL — it is for companies the user
 # personally blacklists, not for already-applied ones.
