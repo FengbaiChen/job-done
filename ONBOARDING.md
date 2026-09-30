@@ -2,6 +2,17 @@
 
 Shareable setup script. Run it as a conversation with a new user — step by step, confirming as you go. Do not dump all questions at once. The pipeline itself is domain-agnostic (it works for any job hunt); the examples below use a software-engineering hunt for concreteness.
 
+## Conversation rules (apply to every step)
+
+- **Roadmap first.** Before Step 1, list all 10 steps in one short message (one line each) with a time estimate.
+- **What + why at every step.** Begin every step with its header ("Step 2/10 — 补全档案") plus one or two sentences: what we're about to do and why it matters for the pipeline. No question ever arrives without that framing — the user should always know why they're being asked.
+- **Premise before follow-up.** Never ask a detail question whose premise isn't established. If a yes/no answer would make the follow-ups moot, ask the yes/no first. (Example: "还要继续投这家公司吗？" comes before "具体投了哪些岗位？把链接给我".)
+- **Ground dates against today.** Compare every resume date with the current date and phrase the inference as a check, never an assertion ("按今天算你已毕业约半年，对吗？" — not "你明年三月毕业").
+- **Present, don't guess.** Cite the source of extracted values ("简历上写的是 X") — never "我猜是…".
+- **Confirm in user terms.** State what changed ("已把申请邮箱改成 inari2021drexel@gmail.com"), never log lines ("更新邮箱Pipeline配置").
+- **Stay on task.** No unsolicited advice, no security tips, no links the user didn't ask for — especially nothing touching their other accounts.
+- **Text-first choices.** Every binary/multiple choice is written out in plain text in the message. Widgets are optional decoration only; if the user answers in free text ("好了", "A和B都开"), map it from what was recorded — never ask "你选的是哪一个？".
+
 ## Step 1 — Resumes
 
 Ask the user to upload 1–3 resumes. Read each one and extract:
@@ -24,11 +35,12 @@ Present the extracted profile back. Ask for anything missing:
 - interview recording consent
 - export-control status if relevant
 - transcript file, if they have one
-- **date of birth (full YYYY-MM-DD; some forms require month/day only) — collect once here, never ask mid-flow**
+- **date of birth (full YYYY-MM-DD; some forms require month/day only) — collect once here, never ask mid-flow.** Stored only in local `profile.yaml` (gitignored, never leaves the machine) — say so when asking.
 - **work history with start/end dates (YYYY-MM) for every role — forms require these and they are never invented**
 - **companies/roles already applied to** — ask outright ("any jobs you've already applied to on your own?"). Seed each into the dedupe cache so discovery never re-suggests them:
   `python3 scripts/seed_applied.py --entry "Company|Title" [--entry "Company|Title|URL"]`
   (This is the Amazon-ADC lesson: URL-only dedup can't catch "I already applied there.")
+  Ordering: for each named company, FIRST ask whether they still want to target it at all. If no → it goes on the `blacklist`, no role details needed. Only if yes, ask for the specific titles/links to seed.
 - standardized test scores only if a target form is known to require them (note "none" is fine)
 
 The user confirms or corrects everything before moving on.
@@ -47,7 +59,7 @@ Users rarely have a target-company list ready, so **recommend one** instead of a
 
 1. Copy `templates/company_boards.template.json` → `references/company_boards.json` (starter set of ~10 generic companies with stable public APIs — the user has coverage from minute one).
 2. From `references/board_directory.json` (49+ companies with verified public ATS APIs, tagged by industry/function), pick 15–25 whose tags overlap the Step 3 tags.
-3. Propose the list to the user with a one-line rationale each ("AI infra, hires new-grad SWEs via Ashby"). They confirm, cut, or add names.
+3. Propose the list grouped by category (company names inline, one short line per group at most — never a 20+ item pitch list). They confirm, cut, or add names with one question.
 4. **Verify live** before saving: hit each confirmed company's board API (`https://boards-api.greenhouse.io/v1/boards/{token}/jobs` or `https://api.ashbyhq.com/posting-api/job-board/{token}`); drop any token that fails and tell the user.
 5. Merge the verified picks into `references/company_boards.json` (dedupe by token).
 
@@ -71,7 +83,7 @@ The pipeline needs mailbox access for two things — this step cannot be skipped
 (a) **Reply tracking.** Recruiter replies, interview invitations, and application confirmation emails are detected automatically (the tracker's status updates depend on it). No mailbox access → no tracking.
 (b) **Verification codes.** Some application sites require an email verification code during registration or before submission. Without mailbox access those applications cannot be completed.
 
-Which mailbox: the one the user puts on applications — usually the email already extracted in Step 1. Confirm it with them.
+Which mailbox: the one the user puts on applications — usually the email already extracted in Step 1. Confirm it with them by citing the source ("your resume lists X — is that the one you apply with?"), never as a guess. If they connect a different mailbox, update the application email in `profile.yaml` and confirm the change explicitly in user terms.
 
 Follow the gmail skill's standard connect flow (`/opt/hatch/skills/gmail/SKILL.md`):
 
@@ -83,7 +95,9 @@ Set expectations in one or two sentences, in the user's own words: verification 
 
 ## Step 7 — LinkedIn login (recommended if LinkedIn is a discovery source)
 
-Roles discovered from LinkedIn need one click on "Apply" — and LinkedIn gates that behind sign-in. The pipeline handles this with a **user-takeover login** (the assistant never sees the password):
+Roles discovered from LinkedIn need one click on "Apply" — and LinkedIn gates that behind sign-in. The pipeline handles this with a **user-takeover login** (the assistant never sees the password).
+
+**Order matters: disclose first, then ask.** Before anything else, state the tradeoff — LinkedIn's ToS technically prohibits automated access, so there is a small account-risk — and ask whether to proceed or skip LinkedIn-Apply. Only if they say proceed:
 
 1. Spawn a browser task that opens https://www.linkedin.com/login and parks, asking the user to take over.
 2. The user opens the task's browser panel, takes over, and signs in with their own credentials (including any 2FA / verification challenge), then ends the takeover and confirms.
@@ -122,7 +136,9 @@ Copy `templates/config.template.yaml` → `config.yaml` and fill it in from ever
 The pipeline can run end-to-end with zero interruptions. Present both switches
 with their risks in plain language and get an explicit yes/no for each. The
 template defaults are the aggressive ones (`true`/`true`); the user may turn
-either off.
+either off. Write both options out as plain text in the message (A/B with their
+risk summaries) — never widget-only. If the user answers in free text, map it
+from what was recorded; never ask "which one did you pick?".
 
 - **A. Auto-fill the shortlist** (`auto_select`, default true): every role that
   passes judging goes straight to form-filling — no picking from a list.
@@ -146,9 +162,11 @@ Record the answers in `config.yaml`. If the user turns B off, also confirm
 
 ## Step 10 — Go live
 
-Create the discovery cron(s) per the schedule (owner: the user's job-search goal or tracked item).
+**Final recap first.** Before creating anything, show one consolidated profile recap: legal name, email, phone, location, work authorization + sponsorship need (verify the exact wording — e.g. OPT pending vs approved), earliest start, relocation, EEO answers, blacklist, lanes + title filters, sources, both automation switches, report destination. The user confirms once — this is the last chance to catch extraction errors (wrong grad date, wrong email) before the pipeline acts on them.
 
-Reporting destination: ask whether discovery reports should go to a dedicated side chat (recommended — keeps the main chat clean) or stay in the current chat. If side chat: create it and set it as the crons' `delivery` target.
+Then create the discovery cron(s) per the schedule (owner: the user's job-search goal or tracked item).
+
+Reporting destination: ask whether discovery reports should go to a dedicated side chat (recommended — keeps the main chat clean) or stay in the current chat. If side chat: create it, set it as the crons' `delivery` target, and immediately post an intro message in the new chat — required, not optional. A brand-new empty chat with no first message feels broken. Template: "这里是 Job Done 投递报告：…" — one short paragraph saying what will land here (per-run reports: submitted applications with confirmations/IDs, blocked-manual list, source health; plus recruiter-reply alerts from the mailbox scan) and what won't (no chatter, no questions).
 
 Confirm with the user:
 

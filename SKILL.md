@@ -51,20 +51,20 @@ For each selected role:
 2. **Free-text questions via the answer bank:** for every free-text/essay question on the form:
    a. Run `python3 ~/workspace/skills/job-pipeline/scripts/qa_match.py --question "<exact question text>"` against `state/qa_bank.json`.
    b. Score ≥ 0.75 → reuse the banked answer verbatim (still show it in the user review); bump its `use_count` in `state/qa_bank.json`.
-   c. No match → draft the answer with the LLM exactly ONCE and show the draft
-      verbatim in the user review; only after the user approves that wording,
-      append it to `state/qa_bank.json` (`question`, `answer`, `company`,
-      `role`, `approved_at`, `use_count: 0`). Open-text questions
-      ("why us", motivation, "most interesting paper", etc.) may be freely
-      drafted and fact-based fields computed from the profile (e.g. years of
-      experience from work history); hard facts (DOB, SSN, test scores,
-      citizenship) are never invented.
+   c. No match → draft the answer with the LLM exactly ONCE from the fact sheet
+      (`profile.yaml` + `references/standing-answers.md`) and use it directly —
+      never ask the user for wording mid-run. Append it to `state/qa_bank.json`
+      (`question`, `answer`, `company`, `role`, `approved_at`, `use_count: 0`)
+      and quote it verbatim in the final report so the user can correct it
+      afterwards. Open-text questions ("why us", motivation, "most interesting
+      paper", etc.) may be freely drafted from real background facts; hard
+      facts (DOB, SSN, test scores, citizenship) are never invented.
    Rules: unapproved drafts never enter the bank; sensitive fields (CSRF tokens, tracking IDs, captcha widgets, hidden inputs) are never sent to the LLM and never banked.
 3. Fill every field per `references/standing-answers.md`, upload the lane-matched resume + transcript automatically (no permission needed). STOP before Submit.
-   **Attempt caps:** max 3 tries per single action (a Submit click, a widget workaround, a dropdown selection). After 3 failures on the same action, stop — the role goes to blocked-manual, the browser task closes, and the URL + exact reason are reported. Never burn 10+ attempts on one control (seen 2026-09-29: C3.ai submit clicked ~15x, Nuro location tried ~10 ways). For widget validation bugs that survive the cap, park the form and offer the user a 30-second takeover instead of more automation attempts.
+   **Attempt caps:** max 3 tries per single action (a Submit click, a widget workaround, a dropdown selection). After 3 failures on the same action, stop — the role goes to blocked-manual, the browser task closes, and the URL + exact reason are reported. Never burn 10+ attempts on one control (seen 2026-09-29: C3.ai submit clicked ~15x, Nuro location tried ~10 ways). For widget validation bugs that survive the cap, the role goes to blocked-manual — no takeover requests, no more automation attempts.
 4. **Email verification codes (on demand only):** some sites require an email verification code during registration or before submission. If a browser fill task parks at such a step, it MUST report back and stop: the site URL, the exact step it is stuck at, and the masked recipient shown on the page (e.g. "code sent to x•••@ucsd.edu"). It must NOT guess the code or proceed.
    The orchestrating agent then performs ONE targeted Gmail lookup: search for the newest message (last ~15 minutes) from that site's sender address, read ONLY that single matching message, take the code, and hand it to the waiting browser task for that step only.
-   Hard rules: one code per step, never reuse a code, never write codes to files / memory / state / logs, never scan the inbox for codes speculatively (no background code sweeps). If no fresh matching message exists, tell the browser task to report back (the user may need to trigger a resend). Filling in the code happens during filling; the final Submit still requires the user's explicit approval — see Stage 5.
+   Hard rules: one code per step, never reuse a code, never write codes to files / memory / state / logs, never scan the inbox for codes speculatively (no background code sweeps). If no fresh matching message exists, skip the role and report it ("verification code not received") — never ask the user to trigger a resend. If the step needs the user to do anything themselves (tap a link on their phone, answer a call), skip the role and report it — never ask. Filling in the code happens during filling; the final Submit still requires the user's explicit approval — see Stage 5.
 5. **Site accounts (register; reset the password if the email is taken):** if an
    application site requires a candidate account, create one with the
    application email — the orchestrating agent sets the password and stores it
@@ -79,7 +79,8 @@ For each selected role:
    - Rate limits / "busy" on verification codes (e.g. "Too Many Attempts. Try Again Later")
    - Submit button unresponsive after multiple attempts with no error shown
    - Form widget validation bugs blocking submission (e.g. location dropdown that won't validate)
-   Missing hard facts (DOB/SSN/test scores/citizenship) are asked of the user once; never invented.
+   - Any step requiring human verification: ID document check, phone-call verification, manual identity review, proctored/in-person checks, or anything the automated email-code lookup can't complete alone — skip the role, report it, never ask the user to verify
+   Missing hard facts (DOB/SSN/test scores/citizenship) are never invented — the role is skipped and reported with URL + reason.
 7. **Fill failures are batch-reported:** every role that cannot be completed
    (CAPTCHA, login wall, missing required info, site error) is recorded with
    its posting URL and the exact reason; all of them are listed together in
@@ -134,13 +135,15 @@ A role may match multiple lanes; assign the highest-priority matching lane and u
 
 ## Operating Rules
 
-1. Never click Submit without the user's submit authorization — which is either an explicit per-run "submit" / "submit all", or the standing `auto_submit: true` confirmed at onboarding with risks explained.
-2. Resume and transcript uploads are routine — never ask permission.
-3. Never invent: citizenship, DOB, SSN, test scores, demographic facts. For a required field with no true answer, use "N/A" only with explicit user approval.
-4. Education is always entered manually; never trust a site's resume auto-parse.
-5. `profile.yaml` and `state/` are personal — never include them when sharing the skill.
-6. Dedupe is sacred: check `state/seen_roles.json` before reading any role URL.
-7. Blocked means manual: CAPTCHA, site/backend errors, rate limits, unresponsive submit, widget bugs → close the browser immediately, no retries (not even scheduled ones), record URL + exact reason, report for the user to apply manually.
+1. **Never ask the user about form-filling matters — this is the first principle.** The user is never interrupted mid-run with form questions. Draft everything yourself from the fact sheet (`profile.yaml` + `references/standing-answers.md`): free-text / "why us" / motivation answers are drafted from real background facts (never invented), salary expectations use the range printed on the job posting (if the posting lists none, use the lane's standing range from the fact sheet — never invent a number out of thin air). If a required answer is truly uncertain or risky (a legal/factual claim you cannot verify), skip that role, record URL + exact reason, and note it in the final report. The user reviews your drafts in the delivered report and can correct them afterwards.
+2. Never click Submit without the user's submit authorization — which is either an explicit per-run "submit" / "submit all", or the standing `auto_submit: true` confirmed at onboarding with risks explained.
+3. Resume and transcript uploads are routine — never ask permission.
+4. Never invent: citizenship, DOB, SSN, test scores, demographic facts. For a required field with no true answer, use "N/A" only where `references/standing-answers.md` pre-authorizes it — otherwise skip the role and report it (never ask mid-flow).
+5. Education is always entered manually; never trust a site's resume auto-parse.
+6. `profile.yaml` and `state/` are personal — never include them when sharing the skill.
+7. Dedupe is sacred: check `state/seen_roles.json` before reading any role URL.
+8. Blocked means manual: CAPTCHA, site/backend errors, rate limits, unresponsive submit, widget bugs → close the browser immediately, no retries (not even scheduled ones), record URL + exact reason, report for the user to apply manually.
+9. **Human verification = automatic skip.** Any role whose submission requires human verification (CAPTCHA/image challenge, manual takeover, in-person checks) is skipped without asking — record URL + reason in `state/seen_roles.json` (`"decision": "blocked"`) and list it in the final report. Set by user 2026-09-29; this overrides the old "offer takeover" behavior.
 
 ## Sharing
 
@@ -148,4 +151,4 @@ Public repo: https://github.com/xf-mike/job-done
 
 To give this to a friend, just send them the link. Their agent clones it into `~/workspace/skills/job-pipeline/` and follows `ONBOARDING.md` with them in conversation. The repo holds only the shareable playbook + templates — `profile.yaml`, `config.yaml`, and `state/` are gitignored, so personal data can never leak into it.
 
-The repo is the source of truth for the playbook: edit `SKILL.md` / `ONBOARDING.md` / `templates/` in `~/workspace/job-pipeline/`, then `git add -A && git commit -m "..." && git push`.
+The repo is the source of truth for the playbook: edit `SKILL.md` / `ONBOARDING.md` / `templates/` in `~/workspace/skills/job-pipeline/`, then `git add -A && git commit -m "..." && git push`.
