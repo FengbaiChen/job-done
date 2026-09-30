@@ -839,6 +839,7 @@ def main():
     print(f"boards_ok={stats['boards_ok']} boards_failed={stats['boards_failed']} "
           f"li_queries_ok={stats['li_ok']}/{stats['li_ok']+stats['li_failed']} "
           f"jobs_pulled={stats['pulled']} deduped_skipped={stats['deduped']} "
+          f"disqualified={stats['disqualified']} "
           f"window_d={stats['window_days']} "
           f"candidates={stats['candidates']} elapsed_s={elapsed:.1f} "
           f"watermark={run_n} closed_marked={closed_marked} health={health_tok}")
