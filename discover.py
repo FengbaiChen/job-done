@@ -74,8 +74,11 @@ def job_identity(job):
             req_id = m.group(1)
             break
     comp = re.sub(r"\s+", " ", (job.get("company") or "").strip().lower())
+    comp = re.sub(r"[^a-z0-9\s]", "", comp).strip()
     title = re.sub(r"\s+", " ", (job.get("title") or "").strip().lower())
-    title = re.sub(r"\s*[\(\[].*?[\)\]]", "", title).strip()
+    title = re.sub(r"\s*[\(\[].*?[\)\]]", "", title)
+    title = re.sub(r"[^a-z0-9\s]", "", title)
+    title = re.sub(r"\s+", " ", title).strip()
     return req_id, comp, title
 
 def build_seen_index(seen):
