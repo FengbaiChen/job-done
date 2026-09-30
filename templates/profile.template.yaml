@@ -21,6 +21,8 @@ recording_consent: true             # consent to AI interview recording?
 no_sat_act: false                   # true if you have no SAT/ACT (e.g. schooled abroad)
 dob: "2000-12-17"                   # YYYY-MM-DD — collected once at onboarding;
                                     # some forms ask month/day only, some full date. Never asked mid-flow.
+salary_expectation: "110000-140000"  # standing range (USD) used when a posting lists no salary
+                                    # range — collected once at onboarding, never invented mid-flow.
 
 work_history:                       # every role with dates — forms require these; never invented
   - title: "Software Engineer"

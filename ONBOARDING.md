@@ -36,6 +36,9 @@ Present the extracted profile back. Ask for anything missing:
 - export-control status if relevant
 - transcript file, if they have one
 - **date of birth (full YYYY-MM-DD; some forms require month/day only) — collect once here, never ask mid-flow.** Stored only in local `profile.yaml` (gitignored, never leaves the machine) — say so when asking.
+- **street address** — some forms make Address Line 1 required; without it those roles are blocked (seen 2026-09-29: Varsity Brands). The resume often lacks it, so ask explicitly. If the user declines to provide it, record "roles requiring a street address are skipped" and move on — never invent one.
+- **LinkedIn profile URL** — ask if the resume doesn't list one.
+- **salary expectation range** — the standing range to fill in when a posting lists no salary range (e.g. $110k–$140k). Stored in `profile.yaml` as `salary_expectation`; a number is never invented mid-flow.
 - **work history with start/end dates (YYYY-MM) for every role — forms require these and they are never invented**
 - **companies/roles already applied to** — ask outright ("any jobs you've already applied to on your own?"). Seed each into the dedupe cache so discovery never re-suggests them:
   `python3 scripts/seed_applied.py --entry "Company|Title" [--entry "Company|Title|URL"]`
@@ -55,11 +58,13 @@ Discuss what the user is hunting for and turn it into pipeline configuration. Do
 
 ## Step 4 — Brand set (recommended, not interrogated)
 
+**What + why:** we're building the list of company career pages the pipeline polls directly on every run. These public ATS boards (Greenhouse/Ashby JSON APIs — complete, structured, no login) are the highest-recall discovery source, which is why they get their own list. **Say this to the user explicitly:** confirming this list does NOT fence the hunt in — roles also arrive from LinkedIn keyword search (the Step 3 queries) and curated community job lists (Step 5), which catch companies with no public board at all. Cutting a company here only removes one direct-poll source; it never blocks that company's roles from surfacing via the other sources.
+
 Users rarely have a target-company list ready, so **recommend one** instead of asking. The pipeline polls company ATS boards directly (public Greenhouse/Ashby JSON APIs — complete, structured, no login), which beats keyword search on recall for the companies it covers.
 
 1. Copy `templates/company_boards.template.json` → `references/company_boards.json` (starter set of ~10 generic companies with stable public APIs — the user has coverage from minute one).
 2. From `references/board_directory.json` (49+ companies with verified public ATS APIs, tagged by industry/function), pick 15–25 whose tags overlap the Step 3 tags.
-3. Propose the list grouped by category (company names inline, one short line per group at most — never a 20+ item pitch list). They confirm, cut, or add names with one question.
+3. Propose the list grouped by category (company names inline, one short line per group at most — never a 20+ item pitch list). They confirm, cut, or add names with one question. In that same message, restate the framing in one line: this list only decides which career pages get polled directly — the search itself is not limited to these companies.
 4. **Verify live** before saving: hit each confirmed company's board API (`https://boards-api.greenhouse.io/v1/boards/{token}/jobs` or `https://api.ashbyhq.com/posting-api/job-board/{token}`); drop any token that fails and tell the user.
 5. Merge the verified picks into `references/company_boards.json` (dedupe by token).
 
@@ -160,9 +165,33 @@ from what was recorded; never ask "which one did you pick?".
 Record the answers in `config.yaml`. If the user turns B off, also confirm
 `submit_review_mode` (batch vs per_application).
 
+### Operating parameters (confirm explicitly — this is the pipeline's basic contract)
+
+The automation switches above are not the whole story. Before the first run,
+confirm three more things with the user in plain language — these are the
+pipeline's basic operating parameters, and they must be the user's choice,
+never silently inherited template defaults:
+
+1. **When it runs (schedule).** State the proposed times explicitly (default:
+   4 discovery sweeps/day at 08:00, 12:00, 16:00, 20:00 local time). The user
+   can change the times, drop to 2/day, or go manual-only. Whatever they agree
+   on is what the crons get — never assume the default. Each run ends with its
+   own report, so more runs also means more report messages.
+2. **How many fill attempts per run (batch size).** `discovery.shortlist_size`
+   (default 20): at most this many judged roles get form-fill attempts per
+   sweep. Frame it as an *attempt* budget — the user should know the number
+   going in, because it bounds both the work done and the size of each report.
+3. **Set the yield expectation.** Say plainly, in the same message: *attempted
+   fills do not all become submissions.* Roles get blocked by CAPTCHAs, login
+   walls, required address lines the user declined to provide, or questions
+   with no safe truthful answer — those are skipped and reported, never forced
+   through. Every run's report shows three numbers — attempted / submitted /
+   blocked-with-reason — so the user always sees the real yield, not just the
+   attempt count.
+
 ## Step 10 — Go live
 
-**Final recap first.** Before creating anything, show one consolidated profile recap: legal name, email, phone, location, work authorization + sponsorship need (verify the exact wording — e.g. OPT pending vs approved), earliest start, relocation, EEO answers, blacklist, lanes + title filters, sources, both automation switches, report destination. The user confirms once — this is the last chance to catch extraction errors (wrong grad date, wrong email) before the pipeline acts on them.
+**Final recap first.** Before creating anything, show one consolidated profile recap: legal name, email, phone, location, work authorization + sponsorship need (verify the exact wording — e.g. OPT pending vs approved), earliest start, relocation, EEO answers, blacklist, lanes + title filters, sources, both automation switches, schedule + batch size (fill attempts per run), the attempted-vs-submitted yield expectation, report destination. The user confirms once — this is the last chance to catch extraction errors (wrong grad date, wrong email) before the pipeline acts on them.
 
 Then create the discovery cron(s) per the schedule (owner: the user's job-search goal or tracked item).
 

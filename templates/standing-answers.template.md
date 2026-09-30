@@ -31,6 +31,9 @@ surface it to the user — never invent.
 - **"How did you hear about us?":** "Job board" free text, or "Other" if
   dropdown-only. If the true source isn't listed, pick the closest job-board
   option (e.g. Indeed) — never leave a required one blank.
+- **Salary expectations:** use the range printed on the job posting. If the
+  posting lists none, use `salary_expectation` from `profile.yaml` — never
+  invent a number out of thin air.
 - **Cover letter:** none, unless the user says otherwise. Leave blank; if a
   form requires one, stop and report.
 - **Free-text "why this company / why this role":** stop and report — the user
