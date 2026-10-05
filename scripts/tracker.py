@@ -89,8 +89,15 @@ def save_state(st):
         json.dump(st, f, indent=2)
 
 
-def sheets(params_cmd):
-    return run_cli(["hatch_gws_cli", "sheets"] + params_cmd)
+def sheets_values(method, spreadsheet_id, range_, values):
+    """values.append / values.update: range params go in --params, the row
+    values go in --json (the API rejects values as a query parameter)."""
+    return run_cli(["hatch_gws_cli", "sheets", "spreadsheets", "values",
+                    method,
+                    "--params", json.dumps({"spreadsheetId": spreadsheet_id,
+                                            "range": range_,
+                                            "valueInputOption": "USER_ENTERED"}),
+                    "--json", json.dumps({"values": values})])
 
 
 def notion(tool, args):
@@ -98,15 +105,23 @@ def notion(tool, args):
                     "--arguments-json", json.dumps(args)])
 
 
-def notion_ok(res):
-    """True unless the MCP call clearly errored."""
+def backend_ok(res):
+    """True when a CLI/API response looks like success. Never raises."""
     if not isinstance(res, dict):
         return False
-    if res.get("_error") or res.get("_raw"):
+    if res.get("_error") or "_raw" in res:
+        return False
+    err = res.get("error")
+    if err:
         return False
     inner = res.get("result", {})
-    content = (inner.get("content") or [{}])[0].get("text", "")
-    return "Input validation error" not in content and not inner.get("isError")
+    if isinstance(inner, dict):
+        if inner.get("isError"):
+            return False
+        content = (inner.get("content") or [{}])[0].get("text", "")
+        if "Input validation error" in content:
+            return False
+    return True
 
 
 # ---------------------------------------------------------------- init
@@ -115,17 +130,24 @@ def cmd_init(args):
     st = load_state()
     out = {}
     if not st.get("spreadsheet_id"):
-        res = sheets(["spreadsheets", "create", "--params",
-                      json.dumps({"properties": {"title": args.sheet_title}})])
+        res = run_cli(["hatch_gws_cli", "sheets", "spreadsheets", "create",
+                       "--json",
+                       json.dumps({"properties": {"title": args.sheet_title}})])
         sid = (res or {}).get("spreadsheetId")
         if sid:
             st["spreadsheet_id"] = sid
-            sheets(["spreadsheets", "values", "update", "--params",
-                    json.dumps({"spreadsheetId": sid,
-                                "range": f"{SHEET_TAB}!A1:H1",
-                                "valueInputOption": "USER_ENTERED",
-                                "values": [SHEET_HEADERS]})])
-            out["sheets"] = {"spreadsheet_id": sid}
+            # A fresh spreadsheet's tab is "Sheet1" — rename it first.
+            run_cli(["hatch_gws_cli", "sheets", "spreadsheets", "batchUpdate",
+                     "--params", json.dumps({"spreadsheetId": sid}),
+                     "--json", json.dumps({"requests": [
+                         {"updateSheetProperties": {
+                             "properties": {"sheetId": 0,
+                                            "title": SHEET_TAB},
+                             "fields": "title"}}]})])
+            hdr = sheets_values("update", sid, f"{SHEET_TAB}!A1:H1",
+                                [SHEET_HEADERS])
+            out["sheets"] = ({"spreadsheet_id": sid} if backend_ok(hdr)
+                             else {"spreadsheet_id": sid, "header_error": hdr})
         else:
             out["sheets"] = {"error": res}
     else:
@@ -177,12 +199,8 @@ def cmd_append(args):
            args.notes or ""]
     sid = st.get("spreadsheet_id")
     if sid:
-        res = sheets(["spreadsheets", "values", "append", "--params",
-                      json.dumps({"spreadsheetId": sid,
-                                  "range": f"{SHEET_TAB}!A:H",
-                                  "valueInputOption": "USER_ENTERED",
-                                  "values": [row]})])
-        out["sheets"] = "ok" if not (res or {}).get("_error") else {"error": res}
+        res = sheets_values("append", sid, f"{SHEET_TAB}!A:H", [row])
+        out["sheets"] = "ok" if backend_ok(res) else {"error": res}
     else:
         out["sheets"] = {"error": "no spreadsheet_id; run init first"}
     ds = st.get("notion_data_source_id")
@@ -193,7 +211,7 @@ def cmd_append(args):
             page["content"] = body
         res = notion("notion-create-pages",
                      {"parent": {"data_source_id": ds}, "pages": [page]})
-        out["notion"] = "ok" if notion_ok(res) else {"error": res}
+        out["notion"] = "ok" if backend_ok(res) else {"error": res}
     else:
         out["notion"] = {"note": "not configured"}
     print(json.dumps(out, ensure_ascii=False))
@@ -211,7 +229,8 @@ def cmd_update_status(args):
     out = {}
     sid = st.get("spreadsheet_id")
     if sid:
-        res = sheets(["spreadsheets", "values", "get", "--params",
+        res = run_cli(["hatch_gws_cli", "sheets",
+                       "spreadsheets", "values", "get", "--params",
                       json.dumps({"spreadsheetId": sid,
                                   "range": f"{SHEET_TAB}!A2:H"})])
         rows = (res or {}).get("values", []) if isinstance(res, dict) else []
@@ -227,12 +246,9 @@ def cmd_update_status(args):
             target = i + 2  # 1-based + header row
             break
         if target:
-            res2 = sheets(["spreadsheets", "values", "update", "--params",
-                           json.dumps({"spreadsheetId": sid,
-                                       "range": f"{SHEET_TAB}!F{target}",
-                                       "valueInputOption": "USER_ENTERED",
-                                       "values": [[args.status]]})])
-            out["sheets"] = ("ok" if not (res2 or {}).get("_error")
+            res2 = sheets_values("update", sid, f"{SHEET_TAB}!F{target}",
+                                 [[args.status]])
+            out["sheets"] = ("ok" if backend_ok(res2)
                              else {"error": res2})
         else:
             out["sheets"] = {"note": "no matching row"}
@@ -263,7 +279,7 @@ def cmd_update_status(args):
                           {"command": "update_properties",
                            "page_id": page_id,
                            "properties": {"Status": [status]}})
-            out["notion"] = "ok" if notion_ok(res2) else {"error": res2}
+            out["notion"] = "ok" if backend_ok(res2) else {"error": res2}
         else:
             out["notion"] = {"note": "no matching page"}
     else:
