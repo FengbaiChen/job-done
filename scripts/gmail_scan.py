@@ -3,7 +3,9 @@
 
 Reads Gmail (via hatch_gws_cli, never writes to the mailbox), pre-filters
 without any LLM, and reports compact hits matched against the applications
-tracker. Designed for scheduled runs: watermarked, incremental, cheap.
+tracker. Matched rejection/interview/offer hits are pushed straight into the
+tracker via scripts/tracker.py (zero LLM) — the agent only reads the summary.
+Designed for scheduled runs: watermarked, incremental, cheap.
 
 Usage:
   python3 scripts/gmail_scan.py [--max N] [--dry-run] [--fixture]
@@ -192,6 +194,42 @@ def guess_company(sender):
     return name or None
 
 
+# gmail_scan kinds -> tracker Status values. Confirmation mails arrive for
+# rows already logged as Applied, so they need no update.
+KIND_TO_STATUS = {
+    "rejection": "Rejected",
+    "interview": "Interview",
+    "offer": "Offer",
+}
+
+
+def push_status_updates(hits, dry_run):
+    """Call tracker.py update-status for matched hits. Zero LLM. Never raises."""
+    if dry_run:
+        return {"dry_run": True}
+    tracker = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "tracker.py")
+    updated, errors = 0, []
+    for h in hits:
+        if not h.get("company") or h.get("kind") not in KIND_TO_STATUS:
+            continue
+        try:
+            p = subprocess.run(
+                [sys.executable, tracker, "update-status",
+                 "--company", h["company"],
+                 "--status", KIND_TO_STATUS[h["kind"]]],
+                capture_output=True, text=True, timeout=120)
+            out = (p.stdout or "").strip()
+            res = json.loads(out) if out.startswith("{") else {}
+            if any(v == "ok" for v in res.values()):
+                updated += 1
+            else:
+                errors.append(h["company"])
+        except (OSError, ValueError, subprocess.SubprocessError):
+            errors.append(h["company"])
+    return {"updated": updated, "errors": errors}
+
+
 def process_messages(messages, companies):
     hits = []
     for m in messages:
@@ -278,6 +316,9 @@ def main():
     print(f"gmail_scan: {len(hits)} hits kinds={kinds} "
           f"tracker_matched={matched} "
           f"watermark={'held (dry-run)' if args.dry_run else 'advanced to ' + now}")
+    if matched and not args.dry_run:
+        res = push_status_updates(hits, args.dry_run)
+        print(f"tracker_update: {json.dumps(res, ensure_ascii=False)}")
     return 0
 
 

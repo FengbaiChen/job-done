@@ -49,12 +49,17 @@ For each selected role:
    `python3 ~/workspace/skills/job-pipeline/scripts/form_cache.py "<application URL>"`.
    It prints the board's cached field mapping (form labels → types/requirements), fetching the public structure only on a cache miss. Reuse that mapping to fill standard fields (name, email, phone, links, education, EEO, work authorization) from `profile.yaml` and `references/standing-answers.md` — do NOT have the LLM re-read and re-parse the entire form on every application. Only genuinely new/unknown fields get individual attention.
 2. **Free-text questions via the answer bank:** for every free-text/essay question on the form:
-   a. Run `python3 ~/workspace/skills/job-pipeline/scripts/qa_match.py --question "<exact question text>"` against `state/qa_bank.json`.
+   a. Run `python3 ~/workspace/skills/job-pipeline/scripts/qa_match.py --question "<exact question text>" --company "<company>"` against `state/qa_bank.json` (the --company flag keeps company-specific banked answers from leaking across companies).
    b. Score ≥ 0.75 → reuse the banked answer verbatim (still show it in the user review); bump its `use_count` in `state/qa_bank.json`.
    c. No match → draft the answer with the LLM exactly ONCE from the fact sheet
       (`profile.yaml` + `references/standing-answers.md`) and use it directly —
-      never ask the user for wording mid-run. Append it to `state/qa_bank.json`
-      (`question`, `answer`, `company`, `role`, `first_used_at`, `use_count: 0`)
+      never ask the user for wording mid-run. For "why this company / why this
+      role" questions, ground the draft in BOTH the user's real background and
+      the job description: pick the 1–2 experiences that best match what the JD
+      emphasizes. Append it to `state/qa_bank.json`
+      (`question`, `answer`, `company`, `role`, `first_used_at`, `use_count: 0`,
+      plus `"scope": "company"` for company-specific answers so they are never
+      reused for another company)
       and quote it verbatim in the final report so the user can correct it
       afterwards. Open-text questions ("why us", motivation, "most interesting
       paper", etc.) may be freely drafted from real background facts; hard
@@ -84,10 +89,10 @@ For each selected role:
    (reset link via the on-demand Gmail lookup, same one-code rules as step 4)
    and store the new password in `Accounts`. If the reset flow hits a CAPTCHA,
    skip per rule 6.
-6. **Blocked → manual handoff: close the browser, never retry.** If a fill task hits any of the following, it MUST stop immediately, close the browser task, and report `blocked: <pattern> — <site URL> — <exact detail>`. Do NOT retry, do NOT schedule an automatic retry, do NOT ask the user mid-flow. The role is marked unfillable and listed in the batch review with its URL and reason, for the user to apply manually later. Observed patterns (2026-09-29 batch):
+6. **Blocked → manual handoff: close the browser, limited retry only for transient errors.** If a fill task hits any of the following, it MUST stop immediately, close the browser task, and report `blocked: <pattern> — <site URL> — <exact detail>`. Do NOT schedule an automatic retry, do NOT ask the user mid-flow. The role is marked unfillable and listed in the batch review with its URL and reason, for the user to apply manually later. Exception: transient rate limits / HTTP 5xx / "busy" responses (NOT verification-code lockouts, NOT CAPTCHAs) get up to 3 backoff retries (~60s apart) before the role is marked blocked-manual. Observed patterns (2026-09-29 batch):
    - CAPTCHA / image challenge / bot-detection wall (hCaptcha, etc.)
    - Site or backend system errors (e.g. Workday VPS `ErrorPage` errors on save — even repeated)
-   - Rate limits / "busy" on verification codes (e.g. "Too Many Attempts. Try Again Later")
+   - Rate limits / "busy" on verification codes (e.g. "Too Many Attempts. Try Again Later") — verification-code lockouts are NOT retried; only generic rate-limit/5xx responses get the backoff retries above
    - Submit button unresponsive after multiple attempts with no error shown
    - Form widget validation bugs blocking submission (e.g. location dropdown that won't validate)
    - Any step requiring human verification: ID document check, phone-call verification, manual identity review, proctored/in-person checks, or anything the automated email-code lookup can't complete alone — skip the role, report it, never ask the user to verify
@@ -110,13 +115,19 @@ How the review works depends on `submit_review_mode` in config.yaml:
 
 `submit_review_mode` (batch / per_application) only applies when `auto_submit: false`.
 
+**JD pull on review:** whenever a review is compiled (batch or per_application), fetch each role's posting page ONCE and extract everything the review depends on the JD for — salary range (or its absence), locations, key requirements, disqualifiers, "why us" hooks. Summarize these per role in the review so one JD read serves every JD-dependent decision; never re-open the posting later for something this pass could have captured.
+
+**Review-type trust** (only when `auto_submit: false`): label each role's review by the riskiest judgment call the fill needed — `essay` (a free-text answer was drafted, not banked), `salary` (a salary number was filled), `new_question` (a first-seen question was answered), `standard` (everything came straight from the profile). Keep approval counts in `state/review_trust.json`; each user approval ("submit" / "submit all") increments the count for every type in the approved set. Once a type reaches `review_trust.approvals_to_auto` (default 3), roles whose review contains ONLY trusted types skip the review and submit immediately.
+
 ### Stage 5 — Submit & log (agent)
 
 **Pre-submit checklist** (before clicking Submit):
 - Re-verify prefilled values against `profile.yaml`: city, enrollment/employment status, name spelling — sites prefill these wrong (seen 2026-09-29: Amazon city + enrollment).
 - If the first Submit click returns field errors (e.g. hidden required fields like Ashby's Location), fill them from the profile, retry ONCE, then stop. A second failure means blocked-manual.
 
-Submit each approved application. Capture: confirmation text, timestamp, application/reference ID if shown. Append one row per application to the tracker. Mark each URL `"decision": "applied"` in `state/seen_roles.json`.
+Submit each approved application. Capture: confirmation text, timestamp, application/reference ID if shown. Log one row per application with zero LLM calls:
+`python3 ~/workspace/skills/job-pipeline/scripts/tracker.py append --company "<c>" --role "<r>" --location "<loc>" --url "<posting>" --resume "<file>" [--notes "<confirmation text / id>"]`
+writes to every configured backend (Sheets + Notion). Mark each URL `"decision": "applied"` in `state/seen_roles.json`.
 
 Submission is always via the browser flow: fill per Stage 3, park at the final review screen, and click Submit only on the user's explicit "submit" / "submit all". Email verification codes encountered during filling are handled per the Stage 3 step 4 on-demand lookup — they never replace the explicit submit approval. Direct-POST submission was evaluated on 2026-09-29 and rejected — do not build or use HTTP submitters: Greenhouse's documented application POST requires an employer API key (Basic Auth); its hosted form is gated by invisible reCAPTCHA Enterprise (bot-scored submissions get HTTP 428 `captcha-failed` and a two-phase email security-code flow) and uploads resumes via presigned S3, so pure-HTTP submission cannot pass; Ashby's hosted submit needs reCAPTCHA + CSRF with v3 spam scoring; Lever/Workday expose no candidate POST path. The public `?questions=true` job endpoint remains the supported way to read a Greenhouse form's structure (used by `scripts/form_cache.py`).
 
@@ -126,9 +137,10 @@ The tracker is the source of truth. Run
 `python3 ~/workspace/skills/job-pipeline/scripts/gmail_scan.py`
 on a schedule (every 4–6h; silent unless hits) to detect recruiter replies,
 interview invitations, and application confirmations: it is watermarked and
-incremental, pre-filters without any LLM, and matches senders against the
-tracker's company list. Report hits to the user and update the tracker's
-Status column.
+incremental, pre-filters without any LLM, matches senders against the
+tracker's company list, and pushes rejection/interview/offer hits straight
+into the tracker via `scripts/tracker.py update-status` — no LLM touches the
+update. Report hits to the user; never hand-edit the Status column.
 
 ## Lane matching
 
@@ -146,15 +158,16 @@ A role may match multiple lanes; assign the highest-priority matching lane and u
 
 ## Operating Rules
 
-1. **Never ask the user about form-filling matters — this is the first principle.** The user is never interrupted mid-run with form questions. Draft everything yourself from the fact sheet (`profile.yaml` + `references/standing-answers.md`): free-text / "why us" / motivation answers are drafted from real background facts (never invented), salary expectations use the range printed on the job posting (if the posting lists none, use the lane's standing range from the fact sheet — never invent a number out of thin air). If a required answer is truly uncertain or risky (a legal/factual claim you cannot verify), skip that role, record URL + exact reason, and note it in the final report. The user reviews your drafts in the delivered report and can correct them afterwards.
+1. **Never ask the user about form-filling matters — this is the first principle.** The user is never interrupted mid-run with form questions. Draft everything yourself from the fact sheet (`profile.yaml` + `references/standing-answers.md`): free-text / "why us" / motivation answers are drafted from real background facts (never invented), salary expectations use the range printed on the job posting (if the posting lists none, look up the local median for the role + area with one quick search — never invent a number out of thin air). If a required answer is truly uncertain or risky (a legal/factual claim you cannot verify), skip that role, record URL + exact reason, and note it in the final report. The user reviews your drafts in the delivered report and can correct them afterwards.
 2. Never click Submit without the user's submit authorization — which is either an explicit per-run "submit" / "submit all", or the standing `auto_submit: true` confirmed at onboarding with risks explained.
 3. Resume and transcript uploads are routine — never ask permission.
 4. Never invent: citizenship, DOB, SSN, test scores, demographic facts. For a required field with no true answer, use "N/A" only where `references/standing-answers.md` pre-authorizes it — otherwise skip the role and report it (never ask mid-flow).
 5. Education is always entered manually; never trust a site's resume auto-parse.
 6. `profile.yaml` and `state/` are personal — never include them when sharing the skill.
 7. Dedupe is sacred: check `state/seen_roles.json` before reading any role URL.
-8. Blocked means manual: CAPTCHA, site/backend errors, rate limits, unresponsive submit, widget bugs → close the browser immediately, no retries (not even scheduled ones), record URL + exact reason, report for the user to apply manually.
+8. Blocked means manual: CAPTCHA, site/backend errors, unresponsive submit, widget bugs, human-verification steps → close the browser immediately, no retries (not even scheduled ones), record URL + exact reason, report for the user to apply manually. Exception: transient rate limits / HTTP 5xx / "busy" responses (not verification-code lockouts, not CAPTCHAs) get up to 3 backoff retries ~60s apart first.
 9. **Human verification = automatic skip.** Any role whose submission requires human verification (CAPTCHA/image challenge, manual takeover, in-person checks) is skipped without asking — record URL + reason in `state/seen_roles.json` (`"decision": "blocked"`) and list it in the final report. Set by user 2026-09-29; this overrides the old "offer takeover" behavior.
+10. **AI-use disclosure → No.** "Did you use AI" questions are answered No: everything submitted is the user's own information; the agent only operates the form and never fabricates content. The one exception: a question that explicitly prohibits AI-generated content (e.g. "please don't use AI" on an essay) is never drafted — it goes to the user to write.
 
 ## Sharing
 

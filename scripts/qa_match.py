@@ -15,7 +15,11 @@ candidate must pass ALL of:
   2. content-word recall >= 0.6 (at least 60% of the banked question's
      content words appear in the new question), AND
   3. not a risky single-word substitution (e.g. earliest/latest,
-     travel/relocate — near-identical strings, different meaning).
+     travel/relocate — near-identical strings, different meaning), AND
+  4. scope check: a bank entry tagged "scope": "company" (company-specific
+     answers like "why us") is only reused when --company matches the
+     entry's company (case-insensitive). Untouched entries default to
+     "generic" and are reusable anywhere.
 
 Content words = alphanumeric tokens minus stopwords (generic question
 boilerplate like "what is your", plus US-country phrasing "us"/"usa"/
@@ -25,7 +29,7 @@ Non-interactive, stdlib-only, read-only: it never writes to the bank.
 Exit code is always 0; missing/empty/malformed banks yield {"match": null}.
 
 Usage:
-    python3 qa_match.py --question "Why do you want to work here?"
+    python3 qa_match.py --question "Why do you want to work here?" --company "Acme"
     python3 qa_match.py --bank /path/to/qa_bank.json --question "..." --threshold 0.8
 
 Output (stdout, single JSON line):
@@ -92,13 +96,17 @@ def is_risky_substitution(bank_tokens, query_tokens):
     return False
 
 
-def best_match(question, bank, threshold):
+def best_match(question, bank, threshold, company=""):
     q = normalize(question)
     if not q:
         return None, 0.0
     qtokens = set(content_tokens(question))
     best, best_score = None, 0.0
     for entry in bank:
+        # Company-scoped answers ("why us" etc.) never cross companies.
+        if entry.get("scope") == "company":
+            if not company or normalize(entry.get("company", "")) != normalize(company):
+                continue
         seq = difflib.SequenceMatcher(None, q, normalize(entry["question"])).ratio()
         if seq < threshold or seq <= best_score:
             continue
@@ -120,11 +128,15 @@ def main():
     ap.add_argument("--question", required=True, help="The free-text question from the application form")
     ap.add_argument("--threshold", type=float, default=0.75,
                     help="Minimum sequence similarity (0-1) to reuse a banked answer")
+    ap.add_argument("--company", default="",
+                    help="Company being applied to; company-scoped bank entries "
+                         "only match this company")
     args = ap.parse_args()
 
     try:
         bank = load_bank(args.bank)
-        entry, score = best_match(args.question, bank, args.threshold)
+        entry, score = best_match(args.question, bank, args.threshold,
+                                  args.company)
         if entry is not None:
             print(json.dumps({
                 "match": entry["question"],

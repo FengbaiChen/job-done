@@ -86,6 +86,10 @@ locations:
   hybrid_ok: true
   # relocation=true: other US locations are eligible but deprioritized in the shortlist.
   # relocation=false: only preferred locations are kept.
+  # Location fields on forms: use the JOB DESCRIPTION's location(s) first,
+  # not this list. Willing-to-relocate is always Yes. If the JD lists several
+  # locations and any is in the Bay Area, prefer the Bay Area one (e.g. SF);
+  # rank the rest by city size, largest first.
 
 grad_rules:
   # When a form only offers future graduation slots, pick the closest one
@@ -97,10 +101,25 @@ grad_rules:
 #   batch          — fill ALL selected roles, one combined review, "submit all" once. (default)
 #   per_application — fill → review → approve → submit → log, one role at a time.
 #                     Smaller turns; lets the user stop early.
+#                     per_application also enables review-type trust (below):
+#                     a role whose review contains only trusted types submits
+#                     immediately without waiting for its review.
 submit_review_mode: batch
 
+# Review-type trust: the agent labels each role's review by the riskiest
+# judgment call it needed — essay (a free-text answer was drafted),
+# salary (a salary number was filled), new_question (a first-seen question
+# was answered), or standard (everything came straight from the profile).
+# Approval counts live in state/review_trust.json. Once the user has approved
+# the SAME type this many times, that type auto-submits without review —
+# the user has seen enough to trust the agent's answers for it.
+review_trust:
+  approvals_to_auto: 3
+
 storage:
-  tracker: "google_sheet"          # spreadsheet id stored in state/tracker.json after creation
+  # google_sheet | notion | both. Backend ids live in state/tracker.json
+  # (gitignored); scripts/tracker.py init wires them up.
+  tracker: "both"
   cache: "state/seen_roles.json"
 
 # Max age of a job posting to consider, in days.

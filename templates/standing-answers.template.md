@@ -28,15 +28,28 @@ surface it to the user — never invent.
   available slot to the real graduation date in `profile.yaml`. Never leave a
   required one blank.
 - **EEO (voluntary):** gender / race / veteran / disability from profile.
-- **"How did you hear about us?":** "Job board" free text, or "Other" if
-  dropdown-only. If the true source isn't listed, pick the closest job-board
-  option (e.g. Indeed) — never leave a required one blank.
+- **"How did you hear about us?":** "LinkedIn" free text, or the closest
+  job-board option if dropdown-only — never leave a required one blank.
 - **Salary expectations:** use the range printed on the job posting. If the
-  posting lists none, use `salary_expectation` from `profile.yaml` — never
-  invent a number out of thin air.
+  posting lists none, look up the local median for the role + area (one quick
+  search) and use that — never invent a number out of thin air, and never ask
+  the user mid-flow.
+- **Location fields:** fill from the JOB DESCRIPTION's location(s), not the
+  config's preferred list. Willing to relocate = Yes, always. If the JD lists
+  several locations and any is in the Bay Area, pick the Bay Area one
+  (e.g. San Francisco); rank the rest by city size, largest first.
+- **AI-use / AI-assistance disclosure** ("did you use AI to complete this
+  application"): answer **No** — all information submitted is the user's own;
+  the agent only operates the form, never fabricates content. Exception: if a
+  question explicitly prohibits AI-generated content (e.g. "please don't use
+  AI" on an essay), do NOT draft it — stop and hand it to the user to write.
 - **Cover letter:** none, unless the user says otherwise. Leave blank; if a
   form requires one, stop and report.
-- **Free-text "why this company / why this role":** stop and report — the user
-  approves the text first (or draft it and include it in the batch review for
-  approval).
+- **Free-text "why this company / why this role":** draft from the user's real
+  background (profile.yaml work history + projects) AND the job description —
+  pick the 1–2 experiences that best match what the JD emphasizes, and say
+  plainly why they fit. Bank company-specific drafts with
+  `"scope": "company"` so they are never reused for another company. Quote the
+  draft verbatim in the review for after-the-fact correction; never ask the
+  user for wording mid-run.
 - **Preferred name:** from profile if present.
